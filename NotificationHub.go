@@ -70,10 +70,10 @@ func (s *NotificationHub) Register(broadcastDomain string, channel chan interfac
 	return guid
 }
 
-func (s *NotificationHub) Unregister(connectionGUID string, reason error) error {
+func (s *NotificationHub) Unregister(connectionGUID string, reason error) {
 	s.connLock.Lock()
 	defer s.connLock.Unlock()
-	return s.Unregister(connectionGUID, reason)
+	s.unregister(connectionGUID, reason)
 }
 
 func (s *NotificationHub) unregister(connectionGUID string, reason error) {
@@ -83,8 +83,8 @@ func (s *NotificationHub) unregister(connectionGUID string, reason error) {
 		conn.LastErr = reason
 
 		allConns := s.connMap[conn.BroadcastDomain]
-		i, err := uhelpers.StringIndexOf(allConns, conn.ConnectionGUID)
-		if i > -1 && err == nil {
+		i, _ := uhelpers.StringIndexOf(allConns, conn.ConnectionGUID)
+		if i > -1 {
 			allConns[i] = allConns[len(allConns)-1]
 			allConns[len(allConns)-1] = ""
 			allConns = allConns[:len(allConns)-1]
