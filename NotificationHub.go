@@ -1,6 +1,8 @@
 package connectionTools
 
 import (
+	"context"
+	"fmt"
 	"sync"
 	"time"
 
@@ -12,14 +14,23 @@ type NotificationHub struct {
 	connections map[string]*HubConnection
 	connMap     map[string][]string
 	connLock    sync.Mutex
-	sendTimeout time.Duration
+	options     NotificationHubOptions
 }
 
-func NewNotificationHub(sendTimeout time.Duration) *NotificationHub {
+func NewNotificationHub(opts ...NotificationHubOptions) *NotificationHub {
+	optsWithDefaults := NotificationHubOptions{}
+	if len(opts) > 0 && opts[0].SendTimeout != nil {
+		optsWithDefaults.SendTimeout = opts[0].SendTimeout
+	}
+
+	if len(opts) > 0 && opts[0].SendBuffer != nil {
+		optsWithDefaults.SendBuffer = opts[0].SendBuffer
+	}
+
 	return &NotificationHub{
 		connections: map[string]*HubConnection{},
 		connMap:     map[string][]string{},
-		sendTimeout: sendTimeout,
+		options:     optsWithDefaults,
 	}
 }
 
@@ -51,14 +62,25 @@ func (s *NotificationHub) Register(broadcastDomain string, channel chan interfac
 	s.connLock.Lock()
 	defer s.connLock.Unlock()
 
+	buffer := make(chan interface{})
+	if s.options.SendBuffer != nil {
+		buffer = make(chan interface{}, *s.options.SendBuffer)
+	}
+
 	guid := uuid.New().String()
+	ctx, cancel := context.WithCancel(context.Background())
 	s.connections[guid] = &HubConnection{
 		LastSeen:        time.Now(),
 		BroadcastDomain: broadcastDomain,
 		Connected:       true,
 		ConnectionGUID:  guid,
-		Channel:         &channel,
+		sendChannel:     channel,
+		sendControl:     make(chan struct{}),
+		sendBuffer:      buffer,
+		sendContext:     ctx,
+		cancel:          cancel,
 	}
+	s.connections[guid].Start()
 
 	// update registry
 	if _, ok := s.connMap[broadcastDomain]; !ok {
@@ -78,7 +100,9 @@ func (s *NotificationHub) Unregister(connectionGUID string, reason error) {
 
 func (s *NotificationHub) unregister(connectionGUID string, reason error) {
 	if conn, ok := s.connections[connectionGUID]; ok {
-		close(*conn.Channel)
+		conn.Stop()
+		close(conn.sendChannel)
+		close(conn.sendBuffer)
 		conn.Connected = false
 		conn.LastErr = reason
 
@@ -102,11 +126,20 @@ func (s *NotificationHub) Notify(broadcastDomain string, data interface{}) (int,
 	if connGUIDs, ok := s.connMap[broadcastDomain]; ok {
 		for _, connGUID := range connGUIDs {
 			if conn, ok := s.connections[connGUID]; ok && conn.Connected {
-				select {
-				case <-time.After(s.sendTimeout):
-					s.unregister(connGUID, ErrSendTimeout)
-					errs[connGUID] = ErrSendTimeout
-				case *conn.Channel <- data:
+				if s.options.SendTimeout != nil {
+					// Send with timeout
+					select {
+					case <-time.After(*s.options.SendTimeout):
+						fmt.Println("timeout reached")
+						s.unregister(connGUID, ErrSendTimeout)
+						errs[connGUID] = ErrSendTimeout
+					case <-conn.Send(data):
+						conn.LastSeen = time.Now()
+						successfulSends++
+					}
+				} else {
+					// Send without timeout
+					<-conn.Send(data)
 					conn.LastSeen = time.Now()
 					successfulSends++
 				}
