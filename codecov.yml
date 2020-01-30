@@ -1,5 +1,5 @@
 ignore:
- - "ConnectionErrors.go"
+ - "Errors.go"
 coverage:
   range: 60..80
   round: down
