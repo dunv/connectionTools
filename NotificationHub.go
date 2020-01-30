@@ -1,8 +1,6 @@
 package connectionTools
 
 import (
-	"context"
-	"fmt"
 	"sync"
 	"time"
 
@@ -25,6 +23,8 @@ func NewNotificationHub(opts ...NotificationHubOptions) *NotificationHub {
 
 	if len(opts) > 0 && opts[0].SendBuffer != nil {
 		optsWithDefaults.SendBuffer = opts[0].SendBuffer
+	} else {
+		optsWithDefaults.SendBuffer = uhelpers.PtrToInt(0)
 	}
 
 	return &NotificationHub{
@@ -62,24 +62,8 @@ func (s *NotificationHub) Register(broadcastDomain string, channel chan interfac
 	s.connLock.Lock()
 	defer s.connLock.Unlock()
 
-	buffer := make(chan interface{})
-	if s.options.SendBuffer != nil {
-		buffer = make(chan interface{}, *s.options.SendBuffer)
-	}
-
 	guid := uuid.New().String()
-	ctx, cancel := context.WithCancel(context.Background())
-	s.connections[guid] = &HubConnection{
-		LastSeen:        time.Now(),
-		BroadcastDomain: broadcastDomain,
-		Connected:       true,
-		ConnectionGUID:  guid,
-		sendChannel:     channel,
-		sendBuffer:      buffer,
-		sendContext:     ctx,
-		cancel:          cancel,
-	}
-	s.connections[guid].Start()
+	s.connections[guid] = NewHubConnection(guid, broadcastDomain, channel, *s.options.SendBuffer)
 
 	// update registry
 	if _, ok := s.connMap[broadcastDomain]; !ok {
@@ -99,11 +83,7 @@ func (s *NotificationHub) Unregister(connectionGUID string, reason error) {
 
 func (s *NotificationHub) unregister(connectionGUID string, reason error) {
 	if conn, ok := s.connections[connectionGUID]; ok {
-		conn.Stop()
-		close(conn.sendChannel)
-		close(conn.sendBuffer)
-		conn.Connected = false
-		conn.LastErr = reason
+		conn.Stop(reason)
 
 		allConns := s.connMap[conn.BroadcastDomain]
 		i, _ := uhelpers.StringIndexOf(allConns, conn.ConnectionGUID)
@@ -129,17 +109,14 @@ func (s *NotificationHub) Notify(broadcastDomain string, data interface{}) (int,
 					// Send with timeout
 					select {
 					case <-time.After(*s.options.SendTimeout):
-						fmt.Println("timeout reached")
 						s.unregister(connGUID, ErrSendTimeout)
 						errs[connGUID] = ErrSendTimeout
-					case conn.sendBuffer <- data:
-						conn.LastSeen = time.Now()
+					case <-conn.Send(data):
 						successfulSends++
 					}
 				} else {
 					// Send without timeout
-					conn.sendBuffer <- data
-					conn.LastSeen = time.Now()
+					<-conn.Send(data)
 					successfulSends++
 				}
 			}
