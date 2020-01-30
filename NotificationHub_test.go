@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestNotificationHubConnection1(t *testing.T) {
+func TestNotificationHubConnection_OneDomain(t *testing.T) {
 	hub := NewNotificationHub()
 	expectedMessages := []string{"test1", "test2", "test3", "test4"}
 	domain := "testDomain"
@@ -19,9 +19,9 @@ func TestNotificationHubConnection1(t *testing.T) {
 	}
 
 	for _, v := range expectedMessages {
-		sends, errs := hub.Notify(domain, v)
+		sends, err := hub.Notify(domain, v)
 		assert.Equal(t, 100, sends)
-		assert.Len(t, errs, 0)
+		assert.NoError(t, err)
 	}
 
 	for i := 0; i < len(expectedMessages); i++ {
@@ -33,7 +33,7 @@ func TestNotificationHubConnection1(t *testing.T) {
 	}
 }
 
-func TestNotificationHubConnection2(t *testing.T) {
+func TestNotificationHubConnectionl_TwoDomains(t *testing.T) {
 	hub := NewNotificationHub()
 	expectedMessages1 := []string{"test11", "test12", "test13", "test14"}
 	expectedMessages2 := []string{"test21", "test22", "test23", "test24"}
@@ -50,15 +50,15 @@ func TestNotificationHubConnection2(t *testing.T) {
 	}
 
 	for _, v := range expectedMessages1 {
-		sends, errs := hub.Notify(domain1, v)
+		sends, err := hub.Notify(domain1, v)
 		assert.Equal(t, 1000, sends)
-		assert.Len(t, errs, 0)
+		assert.NoError(t, err, 0)
 	}
 
 	for _, v := range expectedMessages2 {
-		sends, errs := hub.Notify(domain2, v)
+		sends, err := hub.Notify(domain2, v)
 		assert.Equal(t, 1000, sends)
-		assert.Len(t, errs, 0)
+		assert.NoError(t, err, 0)
 	}
 
 	for i := 0; i < len(expectedMessages1)+len(expectedMessages2); i++ {
@@ -70,7 +70,7 @@ func TestNotificationHubConnection2(t *testing.T) {
 	}
 }
 
-func TestNotificationHubConnection3(t *testing.T) {
+func TestNotificationHubConnection_WithBuffer(t *testing.T) {
 	hub := NewNotificationHub(NotificationHubOptions{SendBuffer: uhelpers.PtrToInt(100)})
 	expectedMessages1 := []string{"test11", "test12", "test13", "test14"}
 	expectedMessages2 := []string{"test21", "test22", "test23", "test24"}
@@ -87,15 +87,15 @@ func TestNotificationHubConnection3(t *testing.T) {
 	}
 
 	for _, v := range expectedMessages1 {
-		sends, errs := hub.Notify(domain1, v)
+		sends, err := hub.Notify(domain1, v)
 		assert.Equal(t, 1000, sends)
-		assert.Len(t, errs, 0)
+		assert.NoError(t, err, 0)
 	}
 
 	for _, v := range expectedMessages2 {
-		sends, errs := hub.Notify(domain2, v)
+		sends, err := hub.Notify(domain2, v)
 		assert.Equal(t, 1000, sends)
-		assert.Len(t, errs, 0)
+		assert.NoError(t, err, 0)
 	}
 
 	for i := 0; i < len(expectedMessages1)+len(expectedMessages2); i++ {
@@ -107,7 +107,7 @@ func TestNotificationHubConnection3(t *testing.T) {
 	}
 }
 
-func TestNotificationHubConnectionWithUnregister(t *testing.T) {
+func TestNotificationHubConnection_WithUnregister(t *testing.T) {
 	hub := NewNotificationHub()
 	expectedMessages := []string{"test1", "test2", "test3", "test4"}
 	domain := "testDomain"
@@ -126,9 +126,9 @@ func TestNotificationHubConnectionWithUnregister(t *testing.T) {
 
 	go func() {
 		for _, v := range expectedMessages {
-			sends, errs := hub.Notify(domain, v)
+			sends, err := hub.Notify(domain, v)
 			assert.Equal(t, 1, sends)
-			assert.Len(t, errs, 0)
+			assert.NoError(t, err)
 		}
 	}()
 
@@ -153,9 +153,9 @@ func TestNotificationHubConnectionWithUnregister(t *testing.T) {
 	sendSuccess := make(chan bool)
 	go func() {
 		for _, v := range expectedMessages {
-			sends, errs := hub.Notify(domain, v)
+			sends, err := hub.Notify(domain, v)
 			assert.Equal(t, 0, sends)
-			assert.Len(t, errs, 0)
+			assert.NoError(t, err)
 		}
 		sendSuccess <- true
 	}()
@@ -175,15 +175,16 @@ func TestNotificationHubConnectionWithUnregister(t *testing.T) {
 	}
 }
 
-func TestNotificationHubConnectionNoTimeout(t *testing.T) {
+func TestNotificationHubConnection_NoTimeout(t *testing.T) {
 	hub := NewNotificationHub()
 	hub.Register("test", make(chan interface{}))
 
 	done := make(chan bool)
 	go func() {
-		sends, errs := hub.Notify("test", "test")
+		sends, err := hub.Notify("test", "test")
 		assert.Equal(t, 0, sends, "should not have sent to anyone")
-		assert.Len(t, errs, 1, "should not have sent to anyone")
+		assert.Error(t, err)
+		assert.Len(t, err.(ErrNotAllReachable).ErrMap, 1, "should not have sent to anyone")
 		done <- true
 	}()
 
@@ -195,15 +196,16 @@ func TestNotificationHubConnectionNoTimeout(t *testing.T) {
 
 }
 
-func TestNotificationHubConnectionTimeout(t *testing.T) {
+func TestNotificationHubConnection_WithTimeout1(t *testing.T) {
 	hub := NewNotificationHub(NotificationHubOptions{SendTimeout: uhelpers.PtrToDuration(100 * time.Millisecond)})
 	hub.Register("test", make(chan interface{}))
 
 	done := make(chan bool)
 	go func() {
-		sends, errs := hub.Notify("test", "test")
+		sends, err := hub.Notify("test", "test")
 		assert.Equal(t, 0, sends, "should not have sent to anyone (timeout was too short)")
-		assert.Len(t, errs, 1, "should not have sent to anyone (timeout was too short)")
+		assert.Error(t, err)
+		assert.Len(t, err.(ErrNotAllReachable).ErrMap, 1, "should not have sent to anyone (timeout was too short)")
 		done <- true
 	}()
 
@@ -214,15 +216,40 @@ func TestNotificationHubConnectionTimeout(t *testing.T) {
 	}
 }
 
-func TestNotificationHubConnectionWithBuffering1(t *testing.T) {
+func TestNotificationHubConnection_WithTimeout2(t *testing.T) {
+	hub := NewNotificationHub(NotificationHubOptions{SendTimeout: uhelpers.PtrToDuration(100 * time.Millisecond)})
+	expectedMessages := []string{"test1", "test2", "test3", "test4"}
+	domain := "testDomain"
+	done := make(chan bool)
+
+	for i := 0; i < 100; i++ {
+		startReceiving(t, hub, domain, expectedMessages, done)
+	}
+
+	for _, v := range expectedMessages {
+		sends, err := hub.Notify(domain, v)
+		assert.Equal(t, 100, sends)
+		assert.NoError(t, err)
+	}
+
+	for i := 0; i < len(expectedMessages); i++ {
+		select {
+		case <-time.After(500 * time.Millisecond):
+			t.Error("timeout")
+		case <-done:
+		}
+	}
+}
+
+func TestNotificationHubConnection_WithBuffering1(t *testing.T) {
 	hub := NewNotificationHub(NotificationHubOptions{SendBuffer: uhelpers.PtrToInt(1)})
 
 	hub.Register("test", make(chan interface{}))
 	done := make(chan bool)
 	go func() {
-		sends, errs := hub.Notify("test", "test")
+		sends, err := hub.Notify("test", "test")
 		assert.Equal(t, 1, sends, "should have sent 1 (in the buffer)")
-		assert.Len(t, errs, 0, "should have sent successfully (with buffering)")
+		assert.NoError(t, err, "should have sent successfully (with buffering)")
 		done <- true
 	}()
 
@@ -234,16 +261,18 @@ func TestNotificationHubConnectionWithBuffering1(t *testing.T) {
 
 }
 
-func TestNotificationHubConnectionWithBuffering2(t *testing.T) {
+func TestNotificationHubConnection_WithBuffering2(t *testing.T) {
 	hub := NewNotificationHub(NotificationHubOptions{SendBuffer: uhelpers.PtrToInt(1)})
 
 	hub.Register("test", make(chan interface{}))
 	done := make(chan bool)
 	go func() {
-		sends, errs := hub.Notify("test", "test")
+		sends, err := hub.Notify("test", "test")
 		assert.Equal(t, 1, sends, "should have sent 1 (in the buffer)")
-		assert.Len(t, errs, 0, "should have sent successfully (with buffering)")
-		hub.Notify("test", "test")
+		assert.NoError(t, err, "should have sent successfully (with buffering)")
+		sends, err = hub.Notify("test", "test")
+		assert.Equal(t, 0, sends, "should have sent 0 (buffer full)")
+		assert.Error(t, err)
 		t.Error("hub.Notify should have blocked, buffer is 1 and no one is consuming")
 		done <- true
 	}()
@@ -255,18 +284,18 @@ func TestNotificationHubConnectionWithBuffering2(t *testing.T) {
 	}
 }
 
-func TestNotificationHubConnectionWithBuffering3(t *testing.T) {
+func TestNotificationHubConnection_WithBuffering3(t *testing.T) {
 	hub := NewNotificationHub(NotificationHubOptions{SendBuffer: uhelpers.PtrToInt(2)})
 
 	hub.Register("test", make(chan interface{}))
 	done := make(chan bool)
 	go func() {
-		sends, errs := hub.Notify("test", "test")
+		sends, err := hub.Notify("test", "test")
 		assert.Equal(t, 1, sends, "should have sent 1 (in the buffer)")
-		assert.Len(t, errs, 0, "should have sent successfully (with buffering)")
-		sends, errs = hub.Notify("test", "test")
+		assert.NoError(t, err, "should have sent successfully (with buffering)")
+		sends, err = hub.Notify("test", "test")
 		assert.Equal(t, 1, sends, "should have sent 1 (in the buffer)")
-		assert.Len(t, errs, 0, "should have sent successfully (with buffering)")
+		assert.NoError(t, err, "should have sent successfully (with buffering)")
 		done <- true
 	}()
 
@@ -278,24 +307,24 @@ func TestNotificationHubConnectionWithBuffering3(t *testing.T) {
 
 }
 
-func TestNotificationHubConnectionWithBuffering4(t *testing.T) {
+func TestNotificationHubConnection_WithBuffering4(t *testing.T) {
 	hub := NewNotificationHub(NotificationHubOptions{SendBuffer: uhelpers.PtrToInt(4)})
 
 	hub.Register("test", make(chan interface{}))
 	done := make(chan bool)
 	go func() {
-		sends, errs := hub.Notify("test", "test")
+		sends, err := hub.Notify("test", "test")
 		assert.Equal(t, 1, sends, "should have sent 1 (in the buffer)")
-		assert.Len(t, errs, 0, "should have sent successfully (with buffering)")
-		sends, errs = hub.Notify("test", "test")
+		assert.NoError(t, err, "should have sent successfully (with buffering)")
+		sends, err = hub.Notify("test", "test")
 		assert.Equal(t, 1, sends, "should have sent 1 (in the buffer)")
-		assert.Len(t, errs, 0, "should have sent successfully (with buffering)")
-		sends, errs = hub.Notify("test", "test")
+		assert.NoError(t, err, "should have sent successfully (with buffering)")
+		sends, err = hub.Notify("test", "test")
 		assert.Equal(t, 1, sends, "should have sent 1 (in the buffer)")
-		assert.Len(t, errs, 0, "should have sent successfully (with buffering)")
-		sends, errs = hub.Notify("test", "test")
+		assert.NoError(t, err, "should have sent successfully (with buffering)")
+		sends, err = hub.Notify("test", "test")
 		assert.Equal(t, 1, sends, "should have sent 1 (in the buffer)")
-		assert.Len(t, errs, 0, "should have sent successfully (with buffering)")
+		assert.NoError(t, err, "should have sent successfully (with buffering)")
 		done <- true
 	}()
 
@@ -307,7 +336,7 @@ func TestNotificationHubConnectionWithBuffering4(t *testing.T) {
 
 }
 
-func TestNotificationHubMetrics(t *testing.T) {
+func TestNotificationHub_Metrics(t *testing.T) {
 	hub := NewNotificationHub()
 
 	dummyChannel1 := make(chan interface{})

@@ -99,7 +99,7 @@ func (s *NotificationHub) unregister(connectionGUID string, reason error) {
 	}
 }
 
-func (s *NotificationHub) Notify(broadcastDomain string, data interface{}) (int, map[string]error) {
+func (s *NotificationHub) Notify(broadcastDomain string, data interface{}) (int, error) {
 	s.connLock.Lock()
 	defer s.connLock.Unlock()
 
@@ -114,20 +114,30 @@ func (s *NotificationHub) Notify(broadcastDomain string, data interface{}) (int,
 					case <-time.After(*s.options.SendTimeout):
 						s.unregister(connGUID, ErrSendTimeout)
 						errs[connGUID] = ErrSendTimeout
-					case <-conn.Send(data):
-						successfulSends++
+					case err := <-conn.Send(data):
+						if err != nil {
+							s.unregister(connGUID, ErrSendTimeout)
+							errs[connGUID] = ErrSendTimeout
+						} else {
+							successfulSends++
+						}
 					}
 				} else {
 					// Send without timeout
-					<-conn.Send(data)
-					successfulSends++
+					err := <-conn.Send(data)
+					if err != nil {
+						s.unregister(connGUID, ErrSendTimeout)
+						errs[connGUID] = ErrSendTimeout
+					} else {
+						successfulSends++
+					}
 				}
 			}
 		}
 	}
 
 	if len(errs) != 0 {
-		return successfulSends, errs
+		return successfulSends, ErrNotAllReachable{ErrMap: errs}
 	}
 
 	return successfulSends, nil
