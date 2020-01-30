@@ -75,7 +75,6 @@ func (s *NotificationHub) Register(broadcastDomain string, channel chan interfac
 		Connected:       true,
 		ConnectionGUID:  guid,
 		sendChannel:     channel,
-		sendControl:     make(chan struct{}),
 		sendBuffer:      buffer,
 		sendContext:     ctx,
 		cancel:          cancel,
@@ -133,13 +132,13 @@ func (s *NotificationHub) Notify(broadcastDomain string, data interface{}) (int,
 						fmt.Println("timeout reached")
 						s.unregister(connGUID, ErrSendTimeout)
 						errs[connGUID] = ErrSendTimeout
-					case <-conn.Send(data):
+					case conn.sendBuffer <- data:
 						conn.LastSeen = time.Now()
 						successfulSends++
 					}
 				} else {
 					// Send without timeout
-					<-conn.Send(data)
+					conn.sendBuffer <- data
 					conn.LastSeen = time.Now()
 					successfulSends++
 				}

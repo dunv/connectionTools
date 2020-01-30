@@ -88,22 +88,22 @@ func TestNotificationHubConnectionNoTimeout(t *testing.T) {
 
 }
 
-// func TestNotificationHubConnectionTimeout(t *testing.T) {
-// 	hub := NewNotificationHub(NotificationHubOptions{SendTimeout: uhelpers.PtrToDuration(100 * time.Millisecond)})
-// 	hub.Register("test", make(chan interface{}))
+func TestNotificationHubConnectionTimeout(t *testing.T) {
+	hub := NewNotificationHub(NotificationHubOptions{SendTimeout: uhelpers.PtrToDuration(100 * time.Millisecond)})
+	hub.Register("test", make(chan interface{}))
 
-// 	done := make(chan bool)
-// 	go func() {
-// 		hub.Notify("test", "test")
-// 		done <- true
-// 	}()
+	done := make(chan bool)
+	go func() {
+		hub.Notify("test", "test")
+		done <- true
+	}()
 
-// 	select {
-// 	case <-time.After(200 * time.Millisecond):
-// 		t.Error("notify did not run into timeout, but should have")
-// 	case <-done:
-// 	}
-// }
+	select {
+	case <-time.After(200 * time.Millisecond):
+		t.Error("notify did not run into timeout, but should have")
+	case <-done:
+	}
+}
 
 func TestNotificationHubConnectionWithBuffering1(t *testing.T) {
 	hub := NewNotificationHub(NotificationHubOptions{SendBuffer: uhelpers.PtrToInt(1)})

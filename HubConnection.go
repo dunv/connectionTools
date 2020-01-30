@@ -13,7 +13,6 @@ type HubConnection struct {
 
 	sendChannel chan interface{}
 	sendBuffer  chan interface{}
-	sendControl chan struct{}
 	cancel      context.CancelFunc
 	sendContext context.Context
 }
@@ -29,7 +28,6 @@ func (h HubConnection) Start() {
 				case <-h.sendContext.Done():
 					return
 				case h.sendChannel <- item:
-					h.sendControl <- struct{}{}
 				}
 			}
 		}
@@ -41,14 +39,4 @@ func (h HubConnection) Stop() {
 		h.cancel()
 		h.cancel = nil
 	}
-}
-
-func (h HubConnection) Send(item interface{}) <-chan struct{} {
-	go func() {
-		select {
-		case <-h.sendContext.Done():
-		case h.sendBuffer <- item:
-		}
-	}()
-	return h.sendControl
 }
