@@ -6,16 +6,44 @@ import (
 )
 
 type HubConnection struct {
-	LastSeen        time.Time `json:"lastSeen,omitempty"`
-	LastErr         error     `json:"lastErr,omitempty"`
-	BroadcastDomain string    `json:"broadcastDomain"`
-	Connected       bool      `json:"connected"`
-	ConnectionGUID  string    `json:"connectionGuid"`
+	lastSeen        time.Time
+	err             error
+	broadcastDomain string
+	connected       bool
+	connectionGUID  string
 
 	sendChannel chan<- interface{}
 	sendBuffer  *chan interface{}
 	cancel      context.CancelFunc
 	sendContext context.Context
+}
+
+type HubConnectionRepr struct {
+	LastSeen        time.Time `json:"lastSeen,omitempty"`
+	Err             error     `json:"lastErr,omitempty"`
+	BroadcastDomain string    `json:"broadcastDomain"`
+	Connected       bool      `json:"connected"`
+	ConnectionGUID  string    `json:"connectionGuid"`
+}
+
+func (h HubConnection) LastSeen() time.Time {
+	return h.lastSeen
+}
+
+func (h HubConnection) Err() error {
+	return h.err
+}
+
+func (h HubConnection) BroadcastDomain() string {
+	return h.broadcastDomain
+}
+
+func (h HubConnection) Connected() bool {
+	return h.connected
+}
+
+func (h HubConnection) ConnectionGUID() string {
+	return h.connectionGUID
 }
 
 func NewHubConnection(
@@ -33,36 +61,36 @@ func NewHubConnection(
 	}
 
 	conn := HubConnection{
-		LastSeen:        time.Now(),
-		BroadcastDomain: broadcastDomain,
-		Connected:       true,
-		ConnectionGUID:  guid,
+		lastSeen:        time.Now(),
+		broadcastDomain: broadcastDomain,
+		connected:       true,
+		connectionGUID:  guid,
 		sendChannel:     sendChannel,
 		sendBuffer:      buffer,
 		sendContext:     ctx,
 		cancel:          cancel,
 	}
-	conn.Start()
+	conn.start()
 	return &conn
 }
 
-func (h HubConnection) Start() {
+func (h HubConnection) start() {
 	if h.sendBuffer != nil {
 		go func() {
 			for h.sendContext.Err() == nil {
 				select {
 				case <-h.sendContext.Done():
-					h.Connected = false
-					h.LastErr = h.sendContext.Err()
+					h.connected = false
+					h.err = h.sendContext.Err()
 					return
 				case item := <-*h.sendBuffer:
 					select {
 					case <-h.sendContext.Done():
-						h.Connected = false
-						h.LastErr = h.sendContext.Err()
+						h.connected = false
+						h.err = h.sendContext.Err()
 						return
 					case h.sendChannel <- item:
-						h.LastSeen = time.Now()
+						h.lastSeen = time.Now()
 					}
 				}
 			}
@@ -71,8 +99,8 @@ func (h HubConnection) Start() {
 }
 
 func (h HubConnection) Stop(err error) {
-	h.LastErr = err
-	h.Connected = false
+	h.err = err
+	h.connected = false
 	if h.cancel != nil {
 		h.cancel()
 		h.cancel = nil
@@ -82,7 +110,7 @@ func (h HubConnection) Stop(err error) {
 func (h HubConnection) Send(item interface{}) <-chan error {
 	res := make(chan error)
 	go func() {
-		if !h.Connected {
+		if !h.connected {
 			res <- ErrConnectionClosed
 			return
 		}
@@ -94,7 +122,7 @@ func (h HubConnection) Send(item interface{}) <-chan error {
 		}
 
 		h.sendChannel <- item
-		h.LastSeen = time.Now()
+		h.lastSeen = time.Now()
 		res <- nil
 
 	}()

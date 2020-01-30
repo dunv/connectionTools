@@ -307,6 +307,126 @@ func TestNotificationHubConnectionWithBuffering4(t *testing.T) {
 
 }
 
+func TestNotificationHubMetrics(t *testing.T) {
+	hub := NewNotificationHub()
+
+	dummyChannel1 := make(chan interface{})
+	guid1 := hub.Register("all", dummyChannel1)
+
+	dummyChannel2 := make(chan interface{})
+	guid2 := hub.Register("all", dummyChannel2)
+
+	conns := hub.Connections()
+	assert.Len(t, conns, 2)
+
+	found1 := false
+	found2 := false
+	for _, conn := range conns {
+		if conn.ConnectionGUID == guid1 {
+			found1 = true
+		}
+		if conn.ConnectionGUID == guid2 {
+			found2 = true
+		}
+	}
+
+	assert.True(t, found1)
+	assert.True(t, found2)
+}
+
+func TestNotificationHubRegistry_PreservingOrder(t *testing.T) {
+	hub := NewNotificationHub()
+	dummyChannel := make(chan interface{})
+
+	guid1 := hub.Register("all", dummyChannel)
+	guid2 := hub.Register("all", dummyChannel)
+
+	reg := hub.Registry()
+	assert.Len(t, reg, 1)
+
+	for domain, regItems := range reg {
+		assert.Equal(t, "all", domain)
+		assert.Len(t, regItems, 2)
+		for i, regItem := range regItems {
+			if i == 0 {
+				assert.Equal(t, guid1, regItem)
+			} else if i == 1 {
+				assert.Equal(t, guid2, regItem)
+			}
+		}
+	}
+
+	hub.Unregister(guid1, nil)
+
+	reg = hub.Registry()
+	assert.Len(t, reg, 1)
+
+	for domain, regItems := range reg {
+		assert.Equal(t, "all", domain)
+		assert.Len(t, regItems, 1)
+		for i, regItem := range regItems {
+			if i == 0 {
+				assert.Equal(t, guid2, regItem)
+			}
+		}
+	}
+
+	guid1 = hub.Register("all", dummyChannel)
+
+	reg = hub.Registry()
+	assert.Len(t, reg, 1)
+
+	for domain, regItems := range reg {
+		assert.Equal(t, "all", domain)
+		assert.Len(t, regItems, 2)
+		for i, regItem := range regItems {
+			if i == 0 {
+				assert.Equal(t, guid2, regItem)
+			} else if i == 1 {
+				assert.Equal(t, guid1, regItem)
+			}
+		}
+	}
+}
+
+func TestNotificationHubRegistry_MultipleDomains(t *testing.T) {
+	hub := NewNotificationHub()
+	dummyChannel := make(chan interface{})
+
+	guid1 := hub.Register("domain1", dummyChannel)
+	guid2 := hub.Register("domain2", dummyChannel)
+
+	reg := hub.Registry()
+	assert.Len(t, reg, 2)
+
+	for domain, regItems := range reg {
+		if domain == "domain1" {
+			assert.Len(t, regItems, 1)
+			for _, regItem := range regItems {
+				assert.Equal(t, guid1, regItem)
+			}
+		} else if domain == "domain2" {
+			assert.Len(t, regItems, 1)
+			for _, regItem := range regItems {
+				assert.Equal(t, guid2, regItem)
+			}
+		}
+	}
+
+	hub.Unregister(guid1, nil)
+	reg = hub.Registry()
+	assert.Len(t, reg, 1)
+
+	for domain, regItems := range reg {
+		assert.Equal(t, "domain2", domain)
+		assert.Len(t, regItems, 1)
+		for _, regItem := range regItems {
+			assert.Equal(t, guid2, regItem)
+		}
+	}
+
+}
+
 func startReceiving(t *testing.T, hub *NotificationHub, domain string, expectedMessages []string, done chan bool) {
 	receiver := make(chan interface{})
 	hub.Register(domain, receiver)

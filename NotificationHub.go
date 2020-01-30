@@ -34,18 +34,18 @@ func NewNotificationHub(opts ...NotificationHubOptions) *NotificationHub {
 	}
 }
 
-func (s *NotificationHub) Connections() []HubConnection {
+func (s *NotificationHub) Connections() []HubConnectionRepr {
 	s.connLock.Lock()
 	defer s.connLock.Unlock()
 
-	copy := []HubConnection{}
+	copy := []HubConnectionRepr{}
 	for _, conn := range s.connections {
-		copy = append(copy, HubConnection{
-			LastSeen:        conn.LastSeen,
-			LastErr:         conn.LastErr,
-			BroadcastDomain: conn.BroadcastDomain,
-			Connected:       conn.Connected,
-			ConnectionGUID:  conn.ConnectionGUID,
+		copy = append(copy, HubConnectionRepr{
+			LastSeen:        conn.LastSeen(),
+			Err:             conn.Err(),
+			BroadcastDomain: conn.BroadcastDomain(),
+			Connected:       conn.Connected(),
+			ConnectionGUID:  conn.ConnectionGUID(),
 		})
 	}
 
@@ -85,13 +85,16 @@ func (s *NotificationHub) unregister(connectionGUID string, reason error) {
 	if conn, ok := s.connections[connectionGUID]; ok {
 		conn.Stop(reason)
 
-		allConns := s.connMap[conn.BroadcastDomain]
-		i, _ := uhelpers.StringIndexOf(allConns, conn.ConnectionGUID)
+		allConns := s.connMap[conn.BroadcastDomain()]
+		i, _ := uhelpers.StringIndexOf(allConns, conn.ConnectionGUID())
 		if i > -1 {
 			allConns[i] = allConns[len(allConns)-1]
 			allConns[len(allConns)-1] = ""
 			allConns = allConns[:len(allConns)-1]
-			s.connMap[conn.BroadcastDomain] = allConns
+			s.connMap[conn.BroadcastDomain()] = allConns
+			if len(allConns) == 0 {
+				delete(s.connMap, conn.BroadcastDomain())
+			}
 		}
 	}
 }
@@ -104,7 +107,7 @@ func (s *NotificationHub) Notify(broadcastDomain string, data interface{}) (int,
 	successfulSends := 0
 	if connGUIDs, ok := s.connMap[broadcastDomain]; ok {
 		for _, connGUID := range connGUIDs {
-			if conn, ok := s.connections[connGUID]; ok && conn.Connected {
+			if conn, ok := s.connections[connGUID]; ok && conn.Connected() {
 				if s.options.SendTimeout != nil {
 					// Send with timeout
 					select {
