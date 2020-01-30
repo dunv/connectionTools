@@ -2,6 +2,7 @@ package connectionTools
 
 import (
 	"context"
+	"sync"
 	"time"
 )
 
@@ -16,6 +17,8 @@ type HubConnection struct {
 	sendBuffer  *chan interface{}
 	cancel      context.CancelFunc
 	sendContext context.Context
+
+	lock sync.Mutex
 }
 
 type HubConnectionRepr struct {
@@ -99,6 +102,9 @@ func (h *HubConnection) start() {
 }
 
 func (h *HubConnection) Stop(err error) {
+	h.lock.Lock()
+	defer h.lock.Unlock()
+
 	h.err = err
 	h.connected = false
 	if h.cancel != nil {
@@ -110,10 +116,13 @@ func (h *HubConnection) Stop(err error) {
 func (h *HubConnection) Send(item interface{}) <-chan error {
 	res := make(chan error)
 	go func() {
+		h.lock.Lock()
 		if !h.connected {
 			res <- ErrConnectionClosed
+			h.lock.Unlock()
 			return
 		}
+		h.lock.Unlock()
 
 		if h.sendBuffer != nil {
 			*h.sendBuffer <- item
