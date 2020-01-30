@@ -18,7 +18,7 @@ func TestRequestResponse_Success(t *testing.T) {
 	defer stopConsuming()
 
 	requestGUID := uuid.New().String()
-	responseChannel := requestResponder.Request(domain, &BaseRequest{Guid: requestGUID})
+	responseChannel := requestResponder.Request(domain, &BaseRequest{GUID: requestGUID})
 
 	go publishRandomResponses(requestGUID, 99, 100, allResponsesChannel)
 
@@ -50,7 +50,7 @@ func TestRequestResponse_SuccessMultipleInput(t *testing.T) {
 	defer stopConsuming4()
 
 	requestGUID := uuid.New().String()
-	responseChannel := requestResponder.Request(domain, &BaseRequest{Guid: requestGUID})
+	responseChannel := requestResponder.Request(domain, &BaseRequest{GUID: requestGUID})
 
 	go publishRandomResponses(requestGUID, 1000, 1000, allResponsesChannel1)
 	go publishRandomResponses(requestGUID, 1000, 1000, allResponsesChannel2)
@@ -76,7 +76,7 @@ func TestRequestResponse_RequestTimeout(t *testing.T) {
 	requestGUID := uuid.New().String()
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	defer cancel()
-	responseChannel := requestResponder.Request(domain, &BaseRequest{Guid: requestGUID}, ctx)
+	responseChannel := requestResponder.Request(domain, &BaseRequest{GUID: requestGUID}, ctx)
 
 	go publishRandomResponses(requestGUID, 100, 100, allResponsesChannel) // index out of range -> never inject correct guid
 
@@ -95,7 +95,7 @@ func publishRandomResponses(correctGUID string, correctIndex int, length int, ch
 			// fmt.Println("---> ", i, "wrong")
 		}
 		channel <- &BaseResponse{
-			CorrelationGuid: guid,
+			CorrelationGUID: guid,
 			Data:            fmt.Sprintf("response %d", i),
 		}
 		// fmt.Println("---> ", i, "done")

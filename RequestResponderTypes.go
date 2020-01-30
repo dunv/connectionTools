@@ -1,40 +1,22 @@
 package connectionTools
 
-type Request interface {
-	Match(Response) bool
-	GUID() string
-}
+type Request interface{ Match(Response) bool }
 
-type Response interface {
-	Match(Request) bool
-	CorrelationGUID() string
-}
+type Response interface{ Identifier() string }
 
 type BaseRequest struct {
-	Guid string      `json:"guid"`
+	GUID string      `json:"guid"`
 	Data interface{} `json:"data"`
 }
 
-func (b *BaseRequest) GUID() string {
-	return b.Guid
-}
-
-func (b *BaseRequest) Match(r Response) bool {
-	return b.Guid == r.CorrelationGUID()
-}
+func (b *BaseRequest) Match(r Response) bool { return b.GUID == r.Identifier() }
 
 type BaseResponse struct {
-	CorrelationGuid string      `json:"correlationGuid"`
+	CorrelationGUID string      `json:"correlationGuid"`
 	Data            interface{} `json:"data"`
 }
 
-func (b *BaseResponse) CorrelationGUID() string {
-	return b.CorrelationGuid
-}
-
-func (b *BaseResponse) Match(r Request) bool {
-	return b.CorrelationGuid == r.GUID()
-}
+func (b *BaseResponse) Identifier() string { return b.CorrelationGUID }
 
 func ExtractErr(response interface{}) (interface{}, error) {
 	switch typed := response.(type) {
