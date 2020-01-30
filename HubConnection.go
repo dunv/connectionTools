@@ -20,29 +20,29 @@ type HubConnection struct {
 
 type HubConnectionRepr struct {
 	LastSeen        time.Time `json:"lastSeen,omitempty"`
-	Err             error     `json:"lastErr,omitempty"`
+	Err             string    `json:"err,omitempty"`
 	BroadcastDomain string    `json:"broadcastDomain"`
 	Connected       bool      `json:"connected"`
 	ConnectionGUID  string    `json:"connectionGuid"`
 }
 
-func (h HubConnection) LastSeen() time.Time {
+func (h *HubConnection) LastSeen() time.Time {
 	return h.lastSeen
 }
 
-func (h HubConnection) Err() error {
+func (h *HubConnection) Err() error {
 	return h.err
 }
 
-func (h HubConnection) BroadcastDomain() string {
+func (h *HubConnection) BroadcastDomain() string {
 	return h.broadcastDomain
 }
 
-func (h HubConnection) Connected() bool {
+func (h *HubConnection) Connected() bool {
 	return h.connected
 }
 
-func (h HubConnection) ConnectionGUID() string {
+func (h *HubConnection) ConnectionGUID() string {
 	return h.connectionGUID
 }
 
@@ -74,7 +74,7 @@ func NewHubConnection(
 	return &conn
 }
 
-func (h HubConnection) start() {
+func (h *HubConnection) start() {
 	if h.sendBuffer != nil {
 		go func() {
 			for h.sendContext.Err() == nil {
@@ -98,7 +98,7 @@ func (h HubConnection) start() {
 	}
 }
 
-func (h HubConnection) Stop(err error) {
+func (h *HubConnection) Stop(err error) {
 	h.err = err
 	h.connected = false
 	if h.cancel != nil {
@@ -107,7 +107,7 @@ func (h HubConnection) Stop(err error) {
 	}
 }
 
-func (h HubConnection) Send(item interface{}) <-chan error {
+func (h *HubConnection) Send(item interface{}) <-chan error {
 	res := make(chan error)
 	go func() {
 		if !h.connected {

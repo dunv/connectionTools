@@ -40,9 +40,13 @@ func (s *NotificationHub) Connections() []HubConnectionRepr {
 
 	copy := []HubConnectionRepr{}
 	for _, conn := range s.connections {
+		var err string
+		if conn.Err() != nil {
+			err = conn.Err().Error()
+		}
 		copy = append(copy, HubConnectionRepr{
 			LastSeen:        conn.LastSeen(),
-			Err:             conn.Err(),
+			Err:             err,
 			BroadcastDomain: conn.BroadcastDomain(),
 			Connected:       conn.Connected(),
 			ConnectionGUID:  conn.ConnectionGUID(),
