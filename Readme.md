@@ -51,3 +51,6 @@ res := <-requestResponder.Request("testDomain", &ct.BaseRequest{GUID: "stringGUI
 // ExtractErr is a wrapper around switch res.(type) and can be omitted
 response, err := ct.ExtractErr(res)
 ```
+
+## TODO
+- custom buffer implementation for leveraging for example redis
