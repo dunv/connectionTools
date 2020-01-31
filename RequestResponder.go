@@ -7,16 +7,35 @@ import (
 )
 
 type RequestResponder struct {
-	hub *NotificationHub
+	responseHub *NotificationHub
+	requestHub  *NotificationHub
 }
 
 func NewRequestResponder() *RequestResponder {
 	return &RequestResponder{
-		hub: NewNotificationHub(),
+		responseHub: NewNotificationHub(),
+		requestHub:  NewNotificationHub(),
 	}
 }
 
-func (r *RequestResponder) StartConsuming(domain string, responseChannel chan interface{}) context.CancelFunc {
+func (r *RequestResponder) AddRequestChannel(domain string, requestChannel chan interface{}) context.CancelFunc {
+
+	ctx, cancelFunc := context.WithCancel(context.Background())
+	go func() {
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case request := <-requestChannel:
+				// fmt.Println("<--- ", "consumer: ", response.(*BaseResponse).Data)
+				ulog.LogIfErrorSecondArg(r.requestHub.Notify(domain, request))
+			}
+		}
+	}()
+	return cancelFunc
+}
+
+func (r *RequestResponder) AddResponseChannel(domain string, responseChannel chan interface{}) context.CancelFunc {
 	ctx, cancelFunc := context.WithCancel(context.Background())
 	go func() {
 		for {
@@ -25,7 +44,7 @@ func (r *RequestResponder) StartConsuming(domain string, responseChannel chan in
 				return
 			case response := <-responseChannel:
 				// fmt.Println("<--- ", "consumer: ", response.(*BaseResponse).Data)
-				ulog.LogIfErrorSecondArg(r.hub.Notify(domain, response))
+				ulog.LogIfErrorSecondArg(r.responseHub.Notify(domain, response))
 			}
 		}
 	}()
@@ -38,7 +57,7 @@ func (r *RequestResponder) Request(domain string, request Request, ctx ...contex
 	}
 
 	possibleResponseChannel := make(chan interface{})
-	subscriptionGUID := r.hub.Register(domain, possibleResponseChannel)
+	subscriptionGUID := r.responseHub.Register(domain, possibleResponseChannel)
 	matchedResponseChannel := make(chan interface{})
 	go func() {
 		for {
@@ -50,7 +69,7 @@ func (r *RequestResponder) Request(domain string, request Request, ctx ...contex
 				case possibleResponse := <-possibleResponseChannel:
 					if typed, ok := possibleResponse.(Response); ok {
 						if request.Match(typed) {
-							r.hub.Unregister(subscriptionGUID, nil)
+							r.responseHub.Unregister(subscriptionGUID, nil)
 							matchedResponseChannel <- possibleResponse
 							return
 						}
@@ -62,7 +81,7 @@ func (r *RequestResponder) Request(domain string, request Request, ctx ...contex
 				possibleResponse := <-possibleResponseChannel
 				if typed, ok := possibleResponse.(Response); ok {
 					if request.Match(typed) {
-						r.hub.Unregister(subscriptionGUID, nil)
+						r.responseHub.Unregister(subscriptionGUID, nil)
 						matchedResponseChannel <- possibleResponse
 						return
 					}
@@ -72,5 +91,6 @@ func (r *RequestResponder) Request(domain string, request Request, ctx ...contex
 			}
 		}
 	}()
+
 	return matchedResponseChannel
 }

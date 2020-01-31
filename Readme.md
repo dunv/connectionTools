@@ -42,7 +42,7 @@ requestResponder := ct.NewRequestResponder()
 var incoming chan interface{}
    
 // have the container start consuming the incoming stream
-cancel := requestResponder.StartConsuming("testDomain", incoming)
+cancel := requestResponder.AddResponseChannel("testDomain", incoming)
 defer cancel()
 
 // wait for the response to arrive (if needed we can pass a context for timeout and cancel)

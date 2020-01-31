@@ -14,7 +14,7 @@ func TestRequestResponse_Success(t *testing.T) {
 	requestResponder := NewRequestResponder()
 	allResponsesChannel := make(chan interface{})
 	domain := "testDomain"
-	stopConsuming := requestResponder.StartConsuming(domain, allResponsesChannel)
+	stopConsuming := requestResponder.AddResponseChannel(domain, allResponsesChannel)
 	defer stopConsuming()
 
 	requestGUID := uuid.New().String()
@@ -34,19 +34,19 @@ func TestRequestResponse_SuccessMultipleInput(t *testing.T) {
 	domain := "testDomain"
 
 	allResponsesChannel1 := make(chan interface{})
-	stopConsuming1 := requestResponder.StartConsuming(domain, allResponsesChannel1)
+	stopConsuming1 := requestResponder.AddResponseChannel(domain, allResponsesChannel1)
 	defer stopConsuming1()
 
 	allResponsesChannel2 := make(chan interface{})
-	stopConsuming2 := requestResponder.StartConsuming(domain, allResponsesChannel2)
+	stopConsuming2 := requestResponder.AddResponseChannel(domain, allResponsesChannel2)
 	defer stopConsuming2()
 
 	allResponsesChannel3 := make(chan interface{})
-	stopConsuming3 := requestResponder.StartConsuming(domain, allResponsesChannel3)
+	stopConsuming3 := requestResponder.AddResponseChannel(domain, allResponsesChannel3)
 	defer stopConsuming3()
 
 	allResponsesChannel4 := make(chan interface{})
-	stopConsuming4 := requestResponder.StartConsuming(domain, allResponsesChannel4)
+	stopConsuming4 := requestResponder.AddResponseChannel(domain, allResponsesChannel4)
 	defer stopConsuming4()
 
 	requestGUID := uuid.New().String()
@@ -70,7 +70,7 @@ func TestRequestResponse_RequestTimeout(t *testing.T) {
 	requestResponder := NewRequestResponder()
 	allResponsesChannel := make(chan interface{})
 	domain := "testDomain"
-	stopConsuming := requestResponder.StartConsuming(domain, allResponsesChannel)
+	stopConsuming := requestResponder.AddResponseChannel(domain, allResponsesChannel)
 	defer stopConsuming()
 
 	requestGUID := uuid.New().String()
