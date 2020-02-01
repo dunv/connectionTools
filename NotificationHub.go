@@ -62,7 +62,7 @@ func (s *NotificationHub) Registry() map[string][]string {
 	return s.connMap
 }
 
-func (s *NotificationHub) Register(broadcastDomain string, channel chan interface{}) string {
+func (s *NotificationHub) Register(broadcastDomain string, channel chan<- interface{}) string {
 	s.connLock.Lock()
 	defer s.connLock.Unlock()
 

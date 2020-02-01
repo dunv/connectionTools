@@ -12,3 +12,5 @@ type ErrNotAllReachable struct {
 func (e ErrNotAllReachable) Error() string {
 	return "could not reach all subscribers"
 }
+
+var ErrNoOneListeningToRequest = errors.New("no one is listening to request")

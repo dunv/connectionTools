@@ -10,28 +10,86 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+func TestRequestResponse_NoOneListeningError(t *testing.T) {
+	requestResponder := NewRequestResponder()
+	domain := "testDomain"
+
+	responseChannel := requestResponder.Request(domain, &BaseRequest{GUID: uuid.New().String()})
+	_, err := ExtractErr(<-responseChannel)
+	assert.EqualError(t, err, ErrNoOneListeningToRequest.Error())
+}
+
 func TestRequestResponse_Success(t *testing.T) {
 	requestResponder := NewRequestResponder()
-	allResponsesChannel := make(chan interface{})
 	domain := "testDomain"
-	stopConsuming := requestResponder.AddResponseChannel(domain, allResponsesChannel)
-	defer stopConsuming()
+
+	requestsChannel := make(chan interface{})
+	cancelRequests := requestResponder.AddRequestChannel(domain, requestsChannel)
+	defer cancelRequests()
+
+	responsesChannel := make(chan interface{})
+	cancelResponse := requestResponder.AddResponseChannel(domain, responsesChannel)
+	defer cancelResponse()
+
+	// Inject traffic
+	go publishRandomResponses("no match", 99, 100000, responsesChannel)
 
 	requestGUID := uuid.New().String()
-	responseChannel := requestResponder.Request(domain, &BaseRequest{GUID: requestGUID})
+	requestData := "injectedResponse"
+	go func() {
+		// Publish correct response after a while
+		<-time.After(1 * time.Second)
+		go publishResponse(requestGUID, requestsChannel, responsesChannel, requestData)
+	}()
 
-	go publishRandomResponses(requestGUID, 99, 100, allResponsesChannel)
+	responseChannel := requestResponder.Request(domain, &BaseRequest{GUID: requestGUID})
 
 	res, err := ExtractErr(<-responseChannel)
 	assert.NoError(t, err, "should have been successful")
 	assert.IsType(t, &BaseResponse{}, res)
 	assert.IsType(t, "", res.(*BaseResponse).Data)
-	assert.Equal(t, "response 99", res.(*BaseResponse).Data.(string))
+	assert.Equal(t, requestData, res.(*BaseResponse).Data.(string))
+}
+
+func TestRequestResponse_RequestTimeout(t *testing.T) {
+	requestResponder := NewRequestResponder()
+	domain := "testDomain"
+
+	requestsChannel := make(chan interface{})
+	cancelRequests := requestResponder.AddRequestChannel(domain, requestsChannel)
+	defer cancelRequests()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
+	responseChannel := requestResponder.Request(domain, &BaseRequest{GUID: uuid.New().String()}, ctx)
+
+	_, err := ExtractErr(<-responseChannel)
+	assert.EqualError(t, err, context.DeadlineExceeded.Error())
+}
+
+func TestRequestResponse_RequestCancelled(t *testing.T) {
+	requestResponder := NewRequestResponder()
+	domain := "testDomain"
+
+	requestsChannel := make(chan interface{})
+	cancelRequests := requestResponder.AddRequestChannel(domain, requestsChannel)
+	defer cancelRequests()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	responseChannel := requestResponder.Request(domain, &BaseRequest{GUID: uuid.New().String()}, ctx)
+	cancel()
+
+	_, err := ExtractErr(<-responseChannel)
+	assert.EqualError(t, err, context.Canceled.Error())
 }
 
 func TestRequestResponse_SuccessMultipleInput(t *testing.T) {
 	requestResponder := NewRequestResponder()
 	domain := "testDomain"
+
+	requestsChannel := make(chan interface{})
+	cancelRequests := requestResponder.AddRequestChannel(domain, requestsChannel)
+	defer cancelRequests()
 
 	allResponsesChannel1 := make(chan interface{})
 	stopConsuming1 := requestResponder.AddResponseChannel(domain, allResponsesChannel1)
@@ -51,37 +109,24 @@ func TestRequestResponse_SuccessMultipleInput(t *testing.T) {
 
 	requestGUID := uuid.New().String()
 	responseChannel := requestResponder.Request(domain, &BaseRequest{GUID: requestGUID})
+	requestData := "injectedPayload"
 
-	go publishRandomResponses(requestGUID, 1000, 1000, allResponsesChannel1)
-	go publishRandomResponses(requestGUID, 1000, 1000, allResponsesChannel2)
-	go publishRandomResponses(requestGUID, 1000, 1000, allResponsesChannel3)
+	go publishRandomResponses(requestGUID, 10000, 10000, allResponsesChannel1)
+	go publishRandomResponses(requestGUID, 10000, 10000, allResponsesChannel2)
+	go publishRandomResponses(requestGUID, 10000, 10000, allResponsesChannel3)
+	go publishRandomResponses(requestGUID, 10000, 10000, allResponsesChannel4)
 
-	<-time.After(200 * time.Millisecond)
-	go publishRandomResponses(requestGUID, 999, 1000, allResponsesChannel4)
+	go func() {
+		// Publish correct response after a while
+		<-time.After(1 * time.Second)
+		go publishResponse(requestGUID, requestsChannel, allResponsesChannel3, requestData)
+	}()
 
 	res, err := ExtractErr(<-responseChannel)
 	assert.NoError(t, err, "should have been successful")
 	assert.IsType(t, &BaseResponse{}, res)
 	assert.IsType(t, "", res.(*BaseResponse).Data)
-	assert.Equal(t, "response 999", res.(*BaseResponse).Data.(string))
-}
-
-func TestRequestResponse_RequestTimeout(t *testing.T) {
-	requestResponder := NewRequestResponder()
-	allResponsesChannel := make(chan interface{})
-	domain := "testDomain"
-	stopConsuming := requestResponder.AddResponseChannel(domain, allResponsesChannel)
-	defer stopConsuming()
-
-	requestGUID := uuid.New().String()
-	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
-	defer cancel()
-	responseChannel := requestResponder.Request(domain, &BaseRequest{GUID: requestGUID}, ctx)
-
-	go publishRandomResponses(requestGUID, 100, 100, allResponsesChannel) // index out of range -> never inject correct guid
-
-	_, err := ExtractErr(<-responseChannel)
-	assert.Error(t, err, "should have received a deadline exceeded")
+	assert.Equal(t, requestData, res.(*BaseResponse).Data.(string))
 }
 
 func publishRandomResponses(correctGUID string, correctIndex int, length int, channel chan interface{}) {
@@ -99,5 +144,13 @@ func publishRandomResponses(correctGUID string, correctIndex int, length int, ch
 			Data:            fmt.Sprintf("response %d", i),
 		}
 		// fmt.Println("---> ", i, "done")
+	}
+}
+
+func publishResponse(correctGUID string, requestChannel chan interface{}, responseChannel chan interface{}, requestData string) {
+	for request := range requestChannel {
+		if request.(*BaseRequest).GUID == correctGUID {
+			responseChannel <- &BaseResponse{CorrelationGUID: correctGUID, Data: requestData}
+		}
 	}
 }

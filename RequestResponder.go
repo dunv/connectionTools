@@ -2,6 +2,7 @@ package connectionTools
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/dunv/ulog"
 )
@@ -18,19 +19,12 @@ func NewRequestResponder() *RequestResponder {
 	}
 }
 
-func (r *RequestResponder) AddRequestChannel(domain string, requestChannel chan interface{}) context.CancelFunc {
-
+func (r *RequestResponder) AddRequestChannel(domain string, requestChannel chan<- interface{}) context.CancelFunc {
 	ctx, cancelFunc := context.WithCancel(context.Background())
+	guid := r.requestHub.Register(domain, requestChannel)
 	go func() {
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case request := <-requestChannel:
-				// fmt.Println("<--- ", "consumer: ", response.(*BaseResponse).Data)
-				ulog.LogIfErrorSecondArg(r.requestHub.Notify(domain, request))
-			}
-		}
+		<-ctx.Done()
+		r.requestHub.Unregister(guid, nil)
 	}()
 	return cancelFunc
 }
@@ -43,7 +37,7 @@ func (r *RequestResponder) AddResponseChannel(domain string, responseChannel cha
 			case <-ctx.Done():
 				return
 			case response := <-responseChannel:
-				// fmt.Println("<--- ", "consumer: ", response.(*BaseResponse).Data)
+				// fmt.Println("<--- ", "response: ", response.(*BaseResponse).Data)
 				ulog.LogIfErrorSecondArg(r.responseHub.Notify(domain, response))
 			}
 		}
@@ -69,6 +63,7 @@ func (r *RequestResponder) Request(domain string, request Request, ctx ...contex
 				case possibleResponse := <-possibleResponseChannel:
 					if typed, ok := possibleResponse.(Response); ok {
 						if request.Match(typed) {
+							fmt.Println("received and match")
 							r.responseHub.Unregister(subscriptionGUID, nil)
 							matchedResponseChannel <- possibleResponse
 							return
@@ -89,6 +84,14 @@ func (r *RequestResponder) Request(domain string, request Request, ctx ...contex
 					ulog.Panicf("received wrong type when consuming responses %+V", possibleResponse)
 				}
 			}
+		}
+	}()
+
+	go func() {
+		sends, _ := r.requestHub.Notify(domain, request)
+		if sends == 0 {
+			matchedResponseChannel <- ErrNoOneListeningToRequest
+			close(matchedResponseChannel)
 		}
 	}()
 
