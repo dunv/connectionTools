@@ -2,8 +2,8 @@ package connectionTools
 
 import (
 	"context"
-	"fmt"
 
+	"github.com/dunv/uhelpers"
 	"github.com/dunv/ulog"
 )
 
@@ -14,8 +14,8 @@ type RequestResponder struct {
 
 func NewRequestResponder() *RequestResponder {
 	return &RequestResponder{
-		responseHub: NewNotificationHub(),
-		requestHub:  NewNotificationHub(),
+		responseHub: NewNotificationHub(NotificationHubOptions{Debug: uhelpers.PtrToBool(false)}),
+		requestHub:  NewNotificationHub(NotificationHubOptions{Debug: uhelpers.PtrToBool(false)}),
 	}
 }
 
@@ -63,9 +63,12 @@ func (r *RequestResponder) Request(domain string, request Request, ctx ...contex
 				case possibleResponse := <-possibleResponseChannel:
 					if typed, ok := possibleResponse.(Response); ok {
 						if request.Match(typed) {
-							fmt.Println("received and match")
-							r.responseHub.Unregister(subscriptionGUID, nil)
+							// important: return before unregistering
 							matchedResponseChannel <- possibleResponse
+
+							// fmt.Println("     -> Unregister")
+							r.responseHub.UnregisterBlocking(subscriptionGUID, nil)
+							// fmt.Println("     <- Unregister")
 							return
 						}
 					} else {
@@ -76,8 +79,12 @@ func (r *RequestResponder) Request(domain string, request Request, ctx ...contex
 				possibleResponse := <-possibleResponseChannel
 				if typed, ok := possibleResponse.(Response); ok {
 					if request.Match(typed) {
-						r.responseHub.Unregister(subscriptionGUID, nil)
+						// important: return before unregistering
 						matchedResponseChannel <- possibleResponse
+
+						// fmt.Println("     -> Unregister")
+						r.responseHub.UnregisterBlocking(subscriptionGUID, nil)
+						// fmt.Println("     <- Unregister")
 						return
 					}
 				} else {

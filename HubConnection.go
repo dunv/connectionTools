@@ -2,6 +2,7 @@ package connectionTools
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"time"
 )
@@ -18,7 +19,8 @@ type HubConnection struct {
 	cancel      context.CancelFunc
 	sendContext context.Context
 
-	lock sync.Mutex
+	lock  sync.Mutex
+	debug bool
 }
 
 type HubConnectionRepr struct {
@@ -54,6 +56,7 @@ func NewHubConnection(
 	broadcastDomain string,
 	sendChannel chan<- interface{},
 	bufferSize int,
+	debug bool,
 ) *HubConnection {
 	ctx, cancel := context.WithCancel(context.Background())
 
@@ -72,6 +75,7 @@ func NewHubConnection(
 		sendBuffer:      buffer,
 		sendContext:     ctx,
 		cancel:          cancel,
+		debug:           debug,
 	}
 	conn.start()
 	return &conn
@@ -102,7 +106,13 @@ func (h *HubConnection) start() {
 }
 
 func (h *HubConnection) Stop(err error) {
+	if h.debug {
+		fmt.Println("           -> stop   ")
+	}
 	h.lock.Lock()
+	if h.debug {
+		fmt.Println("              stop   ")
+	}
 	defer h.lock.Unlock()
 
 	h.err = err
@@ -111,18 +121,30 @@ func (h *HubConnection) Stop(err error) {
 		h.cancel()
 		h.cancel = nil
 	}
+	if h.debug {
+		fmt.Println("              stop -> ")
+	}
 }
 
 func (h *HubConnection) Send(item interface{}) <-chan error {
 	res := make(chan error)
 	go func() {
+		if h.debug {
+			fmt.Println("           -> send    ")
+		}
 		h.lock.Lock()
+		if h.debug {
+			fmt.Println("              send    ")
+		}
 		if !h.connected {
 			res <- ErrConnectionClosed
 			h.lock.Unlock()
 			return
 		}
 		h.lock.Unlock()
+		if h.debug {
+			fmt.Println("              send -> ")
+		}
 
 		if h.sendBuffer != nil {
 			*h.sendBuffer <- item
@@ -131,7 +153,18 @@ func (h *HubConnection) Send(item interface{}) <-chan error {
 		}
 
 		h.sendChannel <- item
+		if h.debug {
+			fmt.Println("           -> send    ")
+		}
+		h.lock.Lock()
+		if h.debug {
+			fmt.Println("              send    ")
+		}
 		h.lastSeen = time.Now()
+		h.lock.Unlock()
+		if h.debug {
+			fmt.Println("              send -> ")
+		}
 		res <- nil
 
 	}()

@@ -83,51 +83,48 @@ func TestRequestResponse_RequestCancelled(t *testing.T) {
 	assert.EqualError(t, err, context.Canceled.Error())
 }
 
-// func TestRequestResponse_SuccessMultipleInput(t *testing.T) {
-// 	requestResponder := NewRequestResponder()
-// 	domain := "testDomain"
+func TestRequestResponse_SuccessMultipleInput(t *testing.T) {
+	requestResponder := NewRequestResponder()
+	domain := "testDomain"
 
-// 	requestsChannel := make(chan interface{})
-// 	cancelRequests := requestResponder.AddRequestChannel(domain, requestsChannel)
-// 	defer cancelRequests()
+	requestsChannel := make(chan interface{})
+	cancelRequests := requestResponder.AddRequestChannel(domain, requestsChannel)
 
-// 	allResponsesChannel1 := make(chan interface{})
-// 	stopConsuming1 := requestResponder.AddResponseChannel(domain, allResponsesChannel1)
-// 	defer stopConsuming1()
+	allResponsesChannel1 := make(chan interface{})
+	stopConsuming1 := requestResponder.AddResponseChannel(domain, allResponsesChannel1)
 
-// 	allResponsesChannel2 := make(chan interface{})
-// 	stopConsuming2 := requestResponder.AddResponseChannel(domain, allResponsesChannel2)
-// 	defer stopConsuming2()
+	allResponsesChannel2 := make(chan interface{})
+	stopConsuming2 := requestResponder.AddResponseChannel(domain, allResponsesChannel2)
 
-// 	allResponsesChannel3 := make(chan interface{})
-// 	stopConsuming3 := requestResponder.AddResponseChannel(domain, allResponsesChannel3)
-// 	defer stopConsuming3()
+	allResponsesChannel3 := make(chan interface{})
+	stopConsuming3 := requestResponder.AddResponseChannel(domain, allResponsesChannel3)
 
-// 	allResponsesChannel4 := make(chan interface{})
-// 	stopConsuming4 := requestResponder.AddResponseChannel(domain, allResponsesChannel4)
-// 	defer stopConsuming4()
+	allResponsesChannel4 := make(chan interface{})
+	stopConsuming4 := requestResponder.AddResponseChannel(domain, allResponsesChannel4)
 
-// 	requestGUID := uuid.New().String()
-// 	responseChannel := requestResponder.Request(domain, &BaseRequest{GUID: requestGUID})
-// 	requestData := "injectedPayload"
+	requestGUID := uuid.New().String()
+	responseChannel := requestResponder.Request(domain, &BaseRequest{GUID: requestGUID, Data: "request"})
+	requestData := "injectedPayload"
 
-// 	go publishRandomResponses(requestGUID, 10000, 10000, allResponsesChannel1)
-// 	go publishRandomResponses(requestGUID, 10000, 10000, allResponsesChannel2)
-// 	go publishRandomResponses(requestGUID, 10000, 10000, allResponsesChannel3)
-// 	go publishRandomResponses(requestGUID, 10000, 10000, allResponsesChannel4)
+	go publishRandomResponses(requestGUID, 10000, 10000, allResponsesChannel1)
+	go publishRandomResponses(requestGUID, 10000, 10000, allResponsesChannel2)
+	go publishRandomResponses(requestGUID, 10000, 10000, allResponsesChannel3)
+	go publishRandomResponses(requestGUID, 10000, 10000, allResponsesChannel4)
 
-// 	go func() {
-// 		// Publish correct response after a while
-// 		<-time.After(1 * time.Second)
-// 		go publishResponse(requestGUID, requestsChannel, allResponsesChannel3, requestData)
-// 	}()
+	go publishResponse(requestGUID, requestsChannel, allResponsesChannel3, requestData)
 
-// 	res, err := ExtractErr(<-responseChannel)
-// 	assert.NoError(t, err, "should have been successful")
-// 	assert.IsType(t, &BaseResponse{}, res)
-// 	assert.IsType(t, "", res.(*BaseResponse).Data)
-// 	assert.Equal(t, requestData, res.(*BaseResponse).Data.(string))
-// }
+	res, err := ExtractErr(<-responseChannel)
+	assert.NoError(t, err, "should have been successful")
+	assert.IsType(t, &BaseResponse{}, res)
+	assert.IsType(t, "", res.(*BaseResponse).Data)
+	assert.Equal(t, requestData, res.(*BaseResponse).Data.(string))
+
+	cancelRequests()
+	stopConsuming1()
+	stopConsuming2()
+	stopConsuming3()
+	stopConsuming4()
+}
 
 func publishRandomResponses(correctGUID string, correctIndex int, length int, channel chan interface{}) {
 	for i := 0; i < length; i++ {
@@ -141,7 +138,7 @@ func publishRandomResponses(correctGUID string, correctIndex int, length int, ch
 		}
 		channel <- &BaseResponse{
 			CorrelationGUID: guid,
-			Data:            fmt.Sprintf("response %d", i),
+			Data:            fmt.Sprintf("%d", i),
 		}
 		// fmt.Println("---> ", i, "done")
 	}

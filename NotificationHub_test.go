@@ -140,7 +140,8 @@ func TestNotificationHubConnection_WithUnregister(t *testing.T) {
 		}
 	}
 
-	hub.Unregister(connGUID, nil)
+	// Use blocking -> we know what we are doing
+	hub.UnregisterBlocking(connGUID, nil)
 
 	go func() {
 		for i := 0; i < len(expectedMessages); i++ {
@@ -385,7 +386,7 @@ func TestNotificationHubRegistry_PreservingOrder(t *testing.T) {
 		}
 	}
 
-	hub.Unregister(guid1, nil)
+	hub.UnregisterBlocking(guid1, nil)
 
 	reg = hub.Registry()
 	assert.Len(t, reg, 1)
@@ -442,7 +443,7 @@ func TestNotificationHubRegistry_MultipleDomains(t *testing.T) {
 		}
 	}
 
-	hub.Unregister(guid1, nil)
+	hub.UnregisterBlocking(guid1, nil)
 	reg = hub.Registry()
 	assert.Len(t, reg, 1)
 
