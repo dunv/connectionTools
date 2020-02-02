@@ -1,6 +1,6 @@
 package connectionTools
 
-type Request interface{ Match(Response) bool }
+type Request interface{ Match(interface{}) bool }
 
 type Response interface{ Identifier() string }
 
@@ -9,14 +9,12 @@ type BaseRequest struct {
 	Data interface{} `json:"data"`
 }
 
-func (b *BaseRequest) Match(r Response) bool { return b.GUID == r.Identifier() }
+func (b *BaseRequest) Match(r interface{}) bool { return b.GUID == r.(*BaseResponse).CorrelationGUID }
 
 type BaseResponse struct {
 	CorrelationGUID string      `json:"correlationGuid"`
 	Data            interface{} `json:"data"`
 }
-
-func (b *BaseResponse) Identifier() string { return b.CorrelationGUID }
 
 func ExtractErr(response interface{}) (interface{}, error) {
 	switch typed := response.(type) {

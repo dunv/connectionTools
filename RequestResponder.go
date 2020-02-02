@@ -61,24 +61,7 @@ func (r *RequestResponder) Request(domain string, request Request, ctx ...contex
 					matchedResponseChannel <- ctx[0].Err()
 					return
 				case possibleResponse := <-possibleResponseChannel:
-					if typed, ok := possibleResponse.(Response); ok {
-						if request.Match(typed) {
-							// important: return before unregistering
-							matchedResponseChannel <- possibleResponse
-
-							// fmt.Println("     -> Unregister")
-							r.responseHub.UnregisterBlocking(subscriptionGUID, nil)
-							// fmt.Println("     <- Unregister")
-							return
-						}
-					} else {
-						ulog.Panicf("received wrong type when consuming responses %+V", possibleResponse)
-					}
-				}
-			} else {
-				possibleResponse := <-possibleResponseChannel
-				if typed, ok := possibleResponse.(Response); ok {
-					if request.Match(typed) {
+					if request.Match(possibleResponse) {
 						// important: return before unregistering
 						matchedResponseChannel <- possibleResponse
 
@@ -87,8 +70,17 @@ func (r *RequestResponder) Request(domain string, request Request, ctx ...contex
 						// fmt.Println("     <- Unregister")
 						return
 					}
-				} else {
-					ulog.Panicf("received wrong type when consuming responses %+V", possibleResponse)
+				}
+			} else {
+				possibleResponse := <-possibleResponseChannel
+				if request.Match(possibleResponse) {
+					// important: return before unregistering
+					matchedResponseChannel <- possibleResponse
+
+					// fmt.Println("     -> Unregister")
+					r.responseHub.UnregisterBlocking(subscriptionGUID, nil)
+					// fmt.Println("     <- Unregister")
+					return
 				}
 			}
 		}
