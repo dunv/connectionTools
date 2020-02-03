@@ -21,6 +21,21 @@ type NotificationHubStatus struct {
 	Registry    map[string][]string `json:"registry"`
 }
 
+func (h NotificationHubStatus) String() string {
+	conns := []string{}
+	for _, conn := range h.Connections {
+		if conn.Connected {
+			conns = append(conns, conn.String())
+		}
+	}
+	registry := []string{}
+	for k, v := range h.Registry {
+		registry = append(registry, fmt.Sprintf("[%s:%d]", k, len(v)))
+	}
+
+	return fmt.Sprintf("Hub[connections: %s, registry: %s]", conns, registry)
+}
+
 func NewNotificationHub(opts ...NotificationHubOptions) *NotificationHub {
 	optsWithDefaults := NotificationHubOptions{}
 	if len(opts) > 0 && opts[0].SendTimeout != nil {
@@ -50,7 +65,11 @@ func (s *NotificationHub) Status() NotificationHubStatus {
 	s.connLock.Lock()
 	conns := []HubConnectionRepr{}
 	for _, conn := range s.connections {
-		conns = append(conns, conn.Status())
+		repr := <-conn.Status()
+		// do NOT access connected on the connection directly
+		if repr.Connected {
+			conns = append(conns, repr)
+		}
 	}
 	registry := map[string][]string{}
 	for k, v := range s.connMap {
@@ -84,13 +103,13 @@ func (s *NotificationHub) Register(broadcastDomain string, channel chan<- interf
 		s.connMap[broadcastDomain] = append(s.connMap[broadcastDomain], guid)
 	}
 
-	count := 0
-	for _, conn := range s.connections {
-		if conn.Connected() {
-			count++
-		}
-	}
-	fmt.Println("register connCount", count)
+	// count := 0
+	// for _, conn := range s.connections {
+	// 	if conn.Connected() {
+	// 		count++
+	// 	}
+	// }
+	// fmt.Println("register connCount", count)
 
 	s.connLock.Unlock()
 	if *s.options.Debug {
@@ -153,13 +172,13 @@ func (s *NotificationHub) unregister(connectionGUID string, reason error) {
 		}
 	}
 
-	count := 0
-	for _, conn := range s.connections {
-		if conn.Connected() {
-			count++
-		}
-	}
-	fmt.Println("unregister connCount", count)
+	// count := 0
+	// for _, conn := range s.connections {
+	// 	if conn.Connected() {
+	// 		count++
+	// 	}
+	// }
+	// fmt.Println("unregister connCount", count)
 }
 
 func (s *NotificationHub) Notify(broadcastDomain string, data interface{}) (int, error) {

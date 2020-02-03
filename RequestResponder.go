@@ -90,7 +90,7 @@ func (r *RequestResponder) Request(domain string, request Request, ctx ...contex
 		sends, _ := r.requestHub.Notify(domain, request)
 		if sends == 0 {
 			matchedResponseChannel <- ErrNoOneListeningToRequest
-			close(matchedResponseChannel)
+			// close(matchedResponseChannel)
 		}
 	}()
 

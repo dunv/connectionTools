@@ -14,23 +14,29 @@ func TestNotificationHubConnection_OneDomain(t *testing.T) {
 	domain := "testDomain"
 	done := make(chan bool)
 
-	for i := 0; i < 100; i++ {
+	receiveRoutines := 100
+
+	for i := 0; i < receiveRoutines; i++ {
 		startReceiving(t, hub, domain, expectedMessages, done)
 	}
 
 	for _, v := range expectedMessages {
 		sends, err := hub.Notify(domain, v)
-		assert.Equal(t, 100, sends)
+		assert.Equal(t, receiveRoutines, sends)
 		assert.NoError(t, err)
 	}
 
-	for i := 0; i < len(expectedMessages); i++ {
+	for i := 0; i < receiveRoutines; i++ {
 		select {
 		case <-time.After(500 * time.Millisecond):
 			t.Error("timeout")
 		case <-done:
 		}
 	}
+
+	status := hub.Status()
+	assert.Len(t, status.Connections, 0, "expected no connections to be left")
+	assert.Len(t, status.Registry, 0)
 }
 
 func TestNotificationHubConnection_TwoDomains(t *testing.T) {
@@ -41,33 +47,40 @@ func TestNotificationHubConnection_TwoDomains(t *testing.T) {
 	domain2 := "testDomain2"
 	done := make(chan bool)
 
-	for i := 0; i < 1000; i++ {
+	receiveRoutines1 := 1
+	receiveRoutines2 := 1
+
+	for i := 0; i < receiveRoutines1; i++ {
 		startReceiving(t, hub, domain1, expectedMessages1, done)
 	}
 
-	for i := 0; i < 1000; i++ {
+	for i := 0; i < receiveRoutines2; i++ {
 		startReceiving(t, hub, domain2, expectedMessages2, done)
 	}
 
 	for _, v := range expectedMessages1 {
 		sends, err := hub.Notify(domain1, v)
-		assert.Equal(t, 1000, sends)
+		assert.Equal(t, receiveRoutines1, sends)
 		assert.NoError(t, err, 0)
 	}
 
 	for _, v := range expectedMessages2 {
 		sends, err := hub.Notify(domain2, v)
-		assert.Equal(t, 1000, sends)
+		assert.Equal(t, receiveRoutines2, sends)
 		assert.NoError(t, err, 0)
 	}
 
-	for i := 0; i < len(expectedMessages1)+len(expectedMessages2); i++ {
+	for i := 0; i < receiveRoutines1+receiveRoutines2; i++ {
 		select {
 		case <-time.After(500 * time.Millisecond):
 			t.Error("timeout")
 		case <-done:
 		}
 	}
+
+	status := hub.Status()
+	assert.Len(t, status.Connections, 0, "expected no connections to be left")
+	assert.Len(t, status.Registry, 0)
 }
 
 func TestNotificationHubConnection_WithBuffer(t *testing.T) {
@@ -78,33 +91,41 @@ func TestNotificationHubConnection_WithBuffer(t *testing.T) {
 	domain2 := "testDomain2"
 	done := make(chan bool)
 
-	for i := 0; i < 1000; i++ {
+	receiveRoutines1 := 10
+	receiveRoutines2 := 10
+
+	for i := 0; i < receiveRoutines1; i++ {
 		startReceiving(t, hub, domain1, expectedMessages1, done)
 	}
 
-	for i := 0; i < 1000; i++ {
+	for i := 0; i < receiveRoutines2; i++ {
 		startReceiving(t, hub, domain2, expectedMessages2, done)
 	}
 
 	for _, v := range expectedMessages1 {
 		sends, err := hub.Notify(domain1, v)
-		assert.Equal(t, 1000, sends)
+		assert.Equal(t, receiveRoutines1, sends)
 		assert.NoError(t, err, 0)
 	}
 
 	for _, v := range expectedMessages2 {
 		sends, err := hub.Notify(domain2, v)
-		assert.Equal(t, 1000, sends)
+		assert.Equal(t, receiveRoutines2, sends)
 		assert.NoError(t, err, 0)
 	}
 
-	for i := 0; i < len(expectedMessages1)+len(expectedMessages2); i++ {
+	for i := 0; i < receiveRoutines1+receiveRoutines2; i++ {
 		select {
 		case <-time.After(500 * time.Millisecond):
 			t.Error("timeout")
 		case <-done:
 		}
 	}
+
+	status := hub.Status()
+	assert.Len(t, status.Connections, 0, "expected no connections to be left")
+	assert.Len(t, status.Registry, 0)
+
 }
 
 func TestNotificationHubConnection_WithUnregister(t *testing.T) {
