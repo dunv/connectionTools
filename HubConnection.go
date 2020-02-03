@@ -3,7 +3,6 @@ package connectionTools
 import (
 	"context"
 	"fmt"
-	"sync"
 	"time"
 )
 
@@ -16,11 +15,30 @@ type HubConnection struct {
 
 	sendChannel chan<- interface{}
 	sendBuffer  *chan interface{}
-	cancel      context.CancelFunc
-	sendContext context.Context
 
-	lock  sync.Mutex
-	debug bool
+	debug         bool
+	internalSend  chan hubConnectionInternalSendRequest
+	internalClose chan hubConnectionInternalCloseRequest
+	ctx           context.Context
+	cancel        context.CancelFunc
+
+	// Statistics
+	openSendRequests   int
+	totalSendRequests  int
+	openCloseRequests  int
+	totalCloseRequests int
+	bufferRoutines     int
+	controlRoutines    int
+}
+
+type hubConnectionInternalSendRequest struct {
+	item     interface{}
+	response chan error
+}
+
+type hubConnectionInternalCloseRequest struct {
+	reason   error
+	response chan error
 }
 
 type HubConnectionRepr struct {
@@ -29,6 +47,35 @@ type HubConnectionRepr struct {
 	BroadcastDomain string    `json:"broadcastDomain"`
 	Connected       bool      `json:"connected"`
 	ConnectionGUID  string    `json:"connectionGuid"`
+
+	// Statistics
+	OpenSendRequests   int `json:"openSendRequests"`
+	TotalSendRequests  int `json:"totalSendRequests"`
+	OpenCloseRequests  int `json:"openCloseRequests"`
+	TotalCloseRequests int `json:"totalCloseRequests"`
+	BufferRoutines     int `json:"bufferRoutines"`
+	ControlRoutines    int `json:"controlRoutines"`
+}
+
+func (h *HubConnection) Status() HubConnectionRepr {
+	var err string
+	if h.err != nil {
+		err = h.err.Error()
+	}
+	return HubConnectionRepr{
+		LastSeen:           h.lastSeen,
+		Err:                err,
+		BroadcastDomain:    h.broadcastDomain,
+		Connected:          h.connected,
+		ConnectionGUID:     h.connectionGUID,
+		OpenSendRequests:   h.openSendRequests,
+		TotalSendRequests:  h.totalSendRequests,
+		OpenCloseRequests:  h.openCloseRequests,
+		TotalCloseRequests: h.totalCloseRequests,
+		BufferRoutines:     h.bufferRoutines,
+		ControlRoutines:    h.controlRoutines,
+	}
+
 }
 
 func (h *HubConnection) LastSeen() time.Time {
@@ -73,28 +120,32 @@ func NewHubConnection(
 		connectionGUID:  guid,
 		sendChannel:     sendChannel,
 		sendBuffer:      buffer,
-		sendContext:     ctx,
-		cancel:          cancel,
 		debug:           debug,
+		internalSend:    make(chan hubConnectionInternalSendRequest),
+		internalClose:   make(chan hubConnectionInternalCloseRequest),
+		ctx:             ctx,
+		cancel:          cancel,
 	}
 	conn.start()
 	return &conn
 }
 
 func (h *HubConnection) start() {
+	// Start sending routine
 	if h.sendBuffer != nil {
 		go func() {
-			for h.sendContext.Err() == nil {
+			h.bufferRoutines++
+			if h.bufferRoutines > 1 {
+				fmt.Println("bufferRoutines", h.bufferRoutines)
+			}
+			for {
 				select {
-				case <-h.sendContext.Done():
-					h.connected = false
-					h.err = h.sendContext.Err()
+				case <-h.ctx.Done():
+					h.bufferRoutines--
 					return
 				case item := <-*h.sendBuffer:
 					select {
-					case <-h.sendContext.Done():
-						h.connected = false
-						h.err = h.sendContext.Err()
+					case <-h.ctx.Done():
 						return
 					case h.sendChannel <- item:
 						h.lastSeen = time.Now()
@@ -103,70 +154,68 @@ func (h *HubConnection) start() {
 			}
 		}()
 	}
+
+	// Start control routine
+	go func() {
+		h.controlRoutines++
+		if h.controlRoutines > 1 {
+			fmt.Println("controlRoutines", h.controlRoutines)
+		}
+		for {
+			select {
+			case <-h.ctx.Done():
+				h.controlRoutines--
+				return
+			case req := <-h.internalSend:
+				h.openSendRequests++
+				h.totalSendRequests++
+				// check for closed connection -> this should never happen?
+				if !h.connected {
+					req.response <- ErrConnectionClosed
+					h.openSendRequests--
+					continue
+				}
+
+				// Send into buffer if we have one
+				if h.sendBuffer != nil {
+					*h.sendBuffer <- req.item
+					req.response <- nil
+					h.openSendRequests--
+					continue
+				}
+
+				// Send into actual channel
+				h.sendChannel <- req.item
+				h.lastSeen = time.Now()
+				req.response <- nil
+				h.openSendRequests--
+			case req := <-h.internalClose:
+				h.openCloseRequests++
+				h.totalCloseRequests++
+				h.connected = false
+				h.err = req.reason
+				h.cancel()
+				req.response <- nil
+				h.openCloseRequests--
+			}
+		}
+	}()
 }
 
-func (h *HubConnection) Stop(err error) {
-	if h.debug {
-		fmt.Println("           -> stop   ")
+func (h *HubConnection) Stop(err error) <-chan error {
+	res := make(chan error)
+	h.internalClose <- hubConnectionInternalCloseRequest{
+		reason:   err,
+		response: res,
 	}
-	h.lock.Lock()
-	if h.debug {
-		fmt.Println("              stop   ")
-	}
-	defer h.lock.Unlock()
-
-	h.err = err
-	h.connected = false
-	if h.cancel != nil {
-		h.cancel()
-		h.cancel = nil
-	}
-	if h.debug {
-		fmt.Println("              stop -> ")
-	}
+	return res
 }
 
 func (h *HubConnection) Send(item interface{}) <-chan error {
 	res := make(chan error)
-	go func() {
-		if h.debug {
-			fmt.Println("           -> send    ")
-		}
-		h.lock.Lock()
-		if h.debug {
-			fmt.Println("              send    ")
-		}
-		if !h.connected {
-			res <- ErrConnectionClosed
-			h.lock.Unlock()
-			return
-		}
-		h.lock.Unlock()
-		if h.debug {
-			fmt.Println("              send -> ")
-		}
-
-		if h.sendBuffer != nil {
-			*h.sendBuffer <- item
-			res <- nil
-			return
-		}
-
-		h.sendChannel <- item
-		if h.debug {
-			fmt.Println("           -> send    ")
-		}
-		h.lock.Lock()
-		if h.debug {
-			fmt.Println("              send    ")
-		}
-		h.lastSeen = time.Now()
-		h.lock.Unlock()
-		if h.debug {
-			fmt.Println("              send -> ")
-		}
-		res <- nil
-
-	}()
+	h.internalSend <- hubConnectionInternalSendRequest{
+		item:     item,
+		response: res,
+	}
 	return res
 }

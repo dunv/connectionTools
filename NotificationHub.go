@@ -16,6 +16,11 @@ type NotificationHub struct {
 	options     NotificationHubOptions
 }
 
+type NotificationHubStatus struct {
+	Connections []HubConnectionRepr `json:"connections"`
+	Registry    map[string][]string `json:"registry"`
+}
+
 func NewNotificationHub(opts ...NotificationHubOptions) *NotificationHub {
 	optsWithDefaults := NotificationHubOptions{}
 	if len(opts) > 0 && opts[0].SendTimeout != nil {
@@ -41,38 +46,23 @@ func NewNotificationHub(opts ...NotificationHubOptions) *NotificationHub {
 	}
 }
 
-func (s *NotificationHub) Connections() []HubConnectionRepr {
+func (s *NotificationHub) Status() NotificationHubStatus {
 	s.connLock.Lock()
-	defer s.connLock.Unlock()
-
-	copy := []HubConnectionRepr{}
+	conns := []HubConnectionRepr{}
 	for _, conn := range s.connections {
-		var err string
-		if conn.Err() != nil {
-			err = conn.Err().Error()
-		}
-		copy = append(copy, HubConnectionRepr{
-			LastSeen:        conn.LastSeen(),
-			Err:             err,
-			BroadcastDomain: conn.BroadcastDomain(),
-			Connected:       conn.Connected(),
-			ConnectionGUID:  conn.ConnectionGUID(),
-		})
+		conns = append(conns, conn.Status())
 	}
-
-	return copy
-}
-
-func (s *NotificationHub) Registry() map[string][]string {
-	s.connLock.Lock()
-	copy := map[string][]string{}
+	registry := map[string][]string{}
 	for k, v := range s.connMap {
 		i := append([]string{}, v...)
-		copy[k] = i
+		registry[k] = i
 	}
+	s.connLock.Unlock()
 
-	defer s.connLock.Unlock()
-	return copy
+	return NotificationHubStatus{
+		Connections: conns,
+		Registry:    registry,
+	}
 }
 
 func (s *NotificationHub) Register(broadcastDomain string, channel chan<- interface{}) string {
@@ -80,13 +70,12 @@ func (s *NotificationHub) Register(broadcastDomain string, channel chan<- interf
 		fmt.Println("-> register")
 	}
 	s.connLock.Lock()
-	defer s.connLock.Unlock()
-
-	guid := uuid.New().String()
-	s.connections[guid] = NewHubConnection(guid, broadcastDomain, channel, *s.options.SendBuffer, *s.options.Debug)
 	if *s.options.Debug {
 		fmt.Println("   register")
 	}
+
+	guid := uuid.New().String()
+	s.connections[guid] = NewHubConnection(guid, broadcastDomain, channel, *s.options.SendBuffer, *s.options.Debug)
 
 	// update registry
 	if _, ok := s.connMap[broadcastDomain]; !ok {
@@ -95,6 +84,15 @@ func (s *NotificationHub) Register(broadcastDomain string, channel chan<- interf
 		s.connMap[broadcastDomain] = append(s.connMap[broadcastDomain], guid)
 	}
 
+	count := 0
+	for _, conn := range s.connections {
+		if conn.Connected() {
+			count++
+		}
+	}
+	fmt.Println("register connCount", count)
+
+	s.connLock.Unlock()
 	if *s.options.Debug {
 		fmt.Println("   register ->")
 	}
@@ -140,7 +138,7 @@ func (s *NotificationHub) unregister(connectionGUID string, reason error) {
 		fmt.Printf("unregistering %s (%s) \n", connectionGUID, reason)
 	}
 	if conn, ok := s.connections[connectionGUID]; ok {
-		conn.Stop(reason)
+		<-conn.Stop(reason)
 
 		allConns := s.connMap[conn.BroadcastDomain()]
 		i, _ := uhelpers.StringIndexOf(allConns, conn.ConnectionGUID())
@@ -154,6 +152,14 @@ func (s *NotificationHub) unregister(connectionGUID string, reason error) {
 			}
 		}
 	}
+
+	count := 0
+	for _, conn := range s.connections {
+		if conn.Connected() {
+			count++
+		}
+	}
+	fmt.Println("unregister connCount", count)
 }
 
 func (s *NotificationHub) Notify(broadcastDomain string, data interface{}) (int, error) {

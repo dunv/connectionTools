@@ -33,7 +33,7 @@ func TestNotificationHubConnection_OneDomain(t *testing.T) {
 	}
 }
 
-func TestNotificationHubConnectionl_TwoDomains(t *testing.T) {
+func TestNotificationHubConnection_TwoDomains(t *testing.T) {
 	hub := NewNotificationHub()
 	expectedMessages1 := []string{"test11", "test12", "test13", "test14"}
 	expectedMessages2 := []string{"test21", "test22", "test23", "test24"}
@@ -346,7 +346,7 @@ func TestNotificationHub_Metrics(t *testing.T) {
 	dummyChannel2 := make(chan interface{})
 	guid2 := hub.Register("all", dummyChannel2)
 
-	conns := hub.Connections()
+	conns := hub.Status().Connections
 	assert.Len(t, conns, 2)
 
 	found1 := false
@@ -371,7 +371,7 @@ func TestNotificationHubRegistry_PreservingOrder(t *testing.T) {
 	guid1 := hub.Register("all", dummyChannel)
 	guid2 := hub.Register("all", dummyChannel)
 
-	reg := hub.Registry()
+	reg := hub.Status().Registry
 	assert.Len(t, reg, 1)
 
 	for domain, regItems := range reg {
@@ -388,7 +388,7 @@ func TestNotificationHubRegistry_PreservingOrder(t *testing.T) {
 
 	hub.UnregisterBlocking(guid1, nil)
 
-	reg = hub.Registry()
+	reg = hub.Status().Registry
 	assert.Len(t, reg, 1)
 
 	for domain, regItems := range reg {
@@ -403,7 +403,7 @@ func TestNotificationHubRegistry_PreservingOrder(t *testing.T) {
 
 	guid1 = hub.Register("all", dummyChannel)
 
-	reg = hub.Registry()
+	reg = hub.Status().Registry
 	assert.Len(t, reg, 1)
 
 	for domain, regItems := range reg {
@@ -426,7 +426,7 @@ func TestNotificationHubRegistry_MultipleDomains(t *testing.T) {
 	guid1 := hub.Register("domain1", dummyChannel)
 	guid2 := hub.Register("domain2", dummyChannel)
 
-	reg := hub.Registry()
+	reg := hub.Status().Registry
 	assert.Len(t, reg, 2)
 
 	for domain, regItems := range reg {
@@ -444,7 +444,7 @@ func TestNotificationHubRegistry_MultipleDomains(t *testing.T) {
 	}
 
 	hub.UnregisterBlocking(guid1, nil)
-	reg = hub.Registry()
+	reg = hub.Status().Registry
 	assert.Len(t, reg, 1)
 
 	for domain, regItems := range reg {
@@ -459,7 +459,7 @@ func TestNotificationHubRegistry_MultipleDomains(t *testing.T) {
 
 func startReceiving(t *testing.T, hub *NotificationHub, domain string, expectedMessages []string, done chan bool) {
 	receiver := make(chan interface{})
-	hub.Register(domain, receiver)
+	guid := hub.Register(domain, receiver)
 
 	go func() {
 		i := 0
@@ -467,6 +467,7 @@ func startReceiving(t *testing.T, hub *NotificationHub, domain string, expectedM
 			assert.Equal(t, expectedMessages[i], msg)
 			i++
 			if len(expectedMessages) == i {
+				hub.UnregisterBlocking(guid, nil)
 				done <- true
 			}
 		}
