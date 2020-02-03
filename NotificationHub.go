@@ -128,7 +128,7 @@ func (s *NotificationHub) Register(broadcastDomain string, channel chan<- interf
 // 	   -> deadlock
 func (s *NotificationHub) Unregister(connectionGUID string, reason error) {
 	go func() {
-		s.Unregister(connectionGUID, reason)
+		s.UnregisterBlocking(connectionGUID, reason)
 	}()
 }
 

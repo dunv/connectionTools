@@ -204,12 +204,10 @@ func (h *HubConnection) start() {
 				close(h.internalLastSeen)
 
 				if h.sendBuffer != nil {
-					fmt.Println("stopping buffer")
 					// "handshake" for stopping buffer operations
 					bufferStopped := make(chan struct{})
 					stopBufferChannel <- bufferStopped
 					<-bufferStopped
-					fmt.Println("buffer stopped")
 				}
 
 				return
