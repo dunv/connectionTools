@@ -209,7 +209,7 @@ func TestNotificationHubConnection_WithTimeout1(t *testing.T) {
 }
 
 func TestNotificationHubConnection_WithTimeout2(t *testing.T) {
-	hub := NewNotificationHub(NotificationHubOptions{SendTimeout: uhelpers.PtrToDuration(time.Millisecond)})
+	hub := NewNotificationHub(NotificationHubOptions{SendTimeout: uhelpers.PtrToDuration(20 * time.Millisecond)})
 	expectedMessages := []string{"test1", "test2", "test3", "test4"}
 	domain := "testDomain"
 	done := make(chan bool)
