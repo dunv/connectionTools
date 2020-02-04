@@ -156,12 +156,6 @@ func (h *HubConnection) start() {
 				case item := <-*h.sendBuffer:
 					select {
 					case h.sendChannel <- item:
-						res := make(chan error)
-						h.internalCommand <- hubConnectionInternalLastSeenRequest{
-							lastSeen: time.Now(),
-							response: res,
-						}
-						<-res
 					case returnChannel := <-stopBufferChannel:
 						returnChannel <- struct{}{}
 						return
