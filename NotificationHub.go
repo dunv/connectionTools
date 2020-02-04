@@ -144,7 +144,11 @@ func (s *NotificationHub) UnregisterBlocking(connectionGUID string, reason error
 		fmt.Println("-> unregister   ")
 	}
 
-	s.connLock.Acquire(context.Background(), 1)
+	err := s.connLock.Acquire(context.Background(), 1)
+	if err != nil {
+		panic(err)
+	}
+
 	if *s.options.Debug {
 		fmt.Println("   unregister   ")
 	}
