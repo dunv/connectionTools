@@ -74,7 +74,7 @@ func TestNotificationHubConnection_TwoDomains(t *testing.T) {
 
 	for i := 0; i < receiveRoutines1+receiveRoutines2; i++ {
 		select {
-		case <-time.After(time.Millisecond):
+		case <-time.After(100 * time.Millisecond):
 			t.Error("timeout")
 		case <-done:
 		}
@@ -113,7 +113,7 @@ func TestNotificationHubConnection_WithUnregister(t *testing.T) {
 
 	for i := 0; i < len(expectedMessages); i++ {
 		select {
-		case <-time.After(time.Millisecond):
+		case <-time.After(100 * time.Millisecond):
 			t.Error("timeout")
 		case <-done:
 		}
@@ -148,7 +148,7 @@ func TestNotificationHubConnection_WithUnregister(t *testing.T) {
 
 	for i := 0; i < len(expectedMessages); i++ {
 		select {
-		case <-time.After(time.Millisecond):
+		case <-time.After(100 * time.Millisecond):
 		case <-done:
 			t.Error("a message was consumed after unregistering")
 		}
@@ -227,7 +227,7 @@ func TestNotificationHubConnection_WithTimeout2(t *testing.T) {
 
 	for i := 0; i < receiveRoutines; i++ {
 		select {
-		case <-time.After(10 * time.Millisecond):
+		case <-time.After(100 * time.Millisecond):
 			t.Error("timeout")
 		case <-done:
 		}
