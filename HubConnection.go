@@ -264,12 +264,28 @@ func (h *HubConnection) Stop(err error) <-chan error {
 	return res
 }
 
-func (h *HubConnection) Send(item interface{}) <-chan error {
+func (h *HubConnection) Send(item interface{}, ctx ...context.Context) <-chan error {
 	res := make(chan error)
-	h.internalSend <- hubConnectionInternalSendRequest{
-		item:     item,
-		response: res,
+	if len(ctx) > 1 {
+		panic("wrong usage")
 	}
+
+	if len(ctx) == 1 {
+		select {
+		case <-ctx[0].Done():
+			res <- ErrSendTimeout
+		case h.internalSend <- hubConnectionInternalSendRequest{
+			item:     item,
+			response: res,
+		}:
+		}
+	} else {
+		h.internalSend <- hubConnectionInternalSendRequest{
+			item:     item,
+			response: res,
+		}
+	}
+
 	return res
 }
 

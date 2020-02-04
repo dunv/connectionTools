@@ -1,9 +1,9 @@
 package connectionTools
 
 import (
+	"context"
 	"fmt"
 	"sync"
-	"time"
 
 	"github.com/dunv/uhelpers"
 	"github.com/google/uuid"
@@ -195,13 +195,17 @@ func (s *NotificationHub) Notify(broadcastDomain string, data interface{}) (int,
 	if connGUIDs, ok := s.connMap[broadcastDomain]; ok {
 		for _, connGUID := range connGUIDs {
 			if conn, ok := s.connections[connGUID]; ok && conn.Connected() {
+
 				if s.options.SendTimeout != nil {
+					sendContext, cancel := context.WithTimeout(context.Background(), *s.options.SendTimeout)
+					defer cancel()
+
 					// Send with timeout
 					select {
-					case <-time.After(*s.options.SendTimeout):
+					case <-sendContext.Done():
 						s.unregister(conn.ConnectionGUID(), ErrSendTimeout)
 						errs[conn.ConnectionGUID()] = ErrSendTimeout
-					case err := <-conn.Send(data):
+					case err := <-conn.Send(data, sendContext):
 						if err != nil {
 							s.unregister(conn.ConnectionGUID(), ErrSendTimeout)
 							errs[conn.ConnectionGUID()] = ErrSendTimeout

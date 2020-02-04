@@ -1,6 +1,7 @@
 package connectionTools
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
@@ -47,8 +48,8 @@ func TestNotificationHubConnection_TwoDomains(t *testing.T) {
 	domain2 := "testDomain2"
 	done := make(chan bool)
 
-	receiveRoutines1 := 1
-	receiveRoutines2 := 1
+	receiveRoutines1 := 1000
+	receiveRoutines2 := 1000
 
 	for i := 0; i < receiveRoutines1; i++ {
 		startReceiving(t, hub, domain1, expectedMessages1, done)
@@ -225,6 +226,7 @@ func TestNotificationHubConnection_WithTimeout1(t *testing.T) {
 	done := make(chan bool)
 	go func() {
 		sends, err := hub.Notify("test", "test")
+		fmt.Println("test")
 		assert.Equal(t, 0, sends, "should not have sent to anyone (timeout was too short)")
 		assert.Error(t, err)
 		assert.Len(t, err.(ErrNotAllReachable).ErrMap, 1, "should not have sent to anyone (timeout was too short)")
@@ -232,10 +234,12 @@ func TestNotificationHubConnection_WithTimeout1(t *testing.T) {
 	}()
 
 	select {
-	case <-time.After(200 * time.Millisecond):
+	case <-time.After(500 * time.Millisecond):
 		t.Error("notify did not run into timeout, but should have")
 	case <-done:
 	}
+
+	time.Sleep(10 * time.Second)
 }
 
 func TestNotificationHubConnection_WithTimeout2(t *testing.T) {
@@ -490,6 +494,7 @@ func startReceiving(t *testing.T, hub *NotificationHub, domain string, expectedM
 			if len(expectedMessages) == i {
 				hub.UnregisterBlocking(guid, nil)
 				done <- true
+				return
 			}
 		}
 	}()
