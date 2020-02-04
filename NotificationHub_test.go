@@ -184,7 +184,7 @@ func TestNotificationHubConnection_NoTimeoutConfigured(t *testing.T) {
 }
 
 func TestNotificationHubConnection_WithTimeout1(t *testing.T) {
-	hub := NewNotificationHub(NotificationHubOptions{SendTimeout: uhelpers.PtrToDuration(time.Millisecond)})
+	hub := NewNotificationHub(NotificationHubOptions{SendTimeout: uhelpers.PtrToDuration(10 * time.Millisecond)})
 	hub.Register("test", make(chan interface{}))
 
 	done := make(chan bool)
@@ -197,7 +197,7 @@ func TestNotificationHubConnection_WithTimeout1(t *testing.T) {
 	}()
 
 	select {
-	case <-time.After(2 * time.Millisecond):
+	case <-time.After(100 * time.Millisecond):
 		t.Error("notify did not run into timeout, but should have")
 	case <-done:
 	}
@@ -209,7 +209,7 @@ func TestNotificationHubConnection_WithTimeout1(t *testing.T) {
 }
 
 func TestNotificationHubConnection_WithTimeout2(t *testing.T) {
-	hub := NewNotificationHub(NotificationHubOptions{SendTimeout: uhelpers.PtrToDuration(20 * time.Millisecond)})
+	hub := NewNotificationHub(NotificationHubOptions{SendTimeout: uhelpers.PtrToDuration(100 * time.Millisecond)})
 	expectedMessages := []string{"test1", "test2", "test3", "test4"}
 	domain := "testDomain"
 	done := make(chan bool)
