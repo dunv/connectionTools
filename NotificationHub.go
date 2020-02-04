@@ -3,16 +3,16 @@ package connectionTools
 import (
 	"context"
 	"fmt"
-	"sync"
 
 	"github.com/dunv/uhelpers"
 	"github.com/google/uuid"
+	"golang.org/x/sync/semaphore"
 )
 
 type NotificationHub struct {
 	connections map[string]*HubConnection
 	connMap     map[string][]string
-	connLock    sync.Mutex
+	connLock    *semaphore.Weighted
 	options     NotificationHubOptions
 }
 
@@ -58,29 +58,38 @@ func NewNotificationHub(opts ...NotificationHubOptions) *NotificationHub {
 		connections: map[string]*HubConnection{},
 		connMap:     map[string][]string{},
 		options:     optsWithDefaults,
+		connLock:    semaphore.NewWeighted(1),
 	}
 }
 
-func (s *NotificationHub) Status() NotificationHubStatus {
-	s.connLock.Lock()
-	conns := []HubConnectionRepr{}
-	for _, conn := range s.connections {
-		repr := <-conn.Status()
-		// do NOT access connected on the connection directly
-		if repr.Connected {
-			conns = append(conns, repr)
+func (s *NotificationHub) Status(ctx context.Context) (*NotificationHubStatus, error) {
+	if s.connLock.Acquire(ctx, 1) == nil {
+		conns := []HubConnectionRepr{}
+		for _, conn := range s.connections {
+			repr := <-conn.Status(ctx)
+			switch typed := repr.(type) {
+			case HubConnectionRepr:
+				// do NOT access connected on the connection directly
+				if typed.Connected {
+					conns = append(conns, typed)
+				}
+			case error:
+				return nil, ErrConnectionLocked
+			}
 		}
-	}
-	registry := map[string][]string{}
-	for k, v := range s.connMap {
-		i := append([]string{}, v...)
-		registry[k] = i
-	}
-	s.connLock.Unlock()
+		registry := map[string][]string{}
+		for k, v := range s.connMap {
+			i := append([]string{}, v...)
+			registry[k] = i
+		}
 
-	return NotificationHubStatus{
-		Connections: conns,
-		Registry:    registry,
+		s.connLock.Release(1)
+		return &NotificationHubStatus{
+			Connections: conns,
+			Registry:    registry,
+		}, nil
+	} else {
+		return nil, ErrHubLocked
 	}
 }
 
@@ -88,7 +97,10 @@ func (s *NotificationHub) Register(broadcastDomain string, channel chan<- interf
 	if *s.options.Debug {
 		fmt.Println("-> register")
 	}
-	s.connLock.Lock()
+	err := s.connLock.Acquire(context.Background(), 1)
+	if err != nil {
+		panic(err)
+	}
 	if *s.options.Debug {
 		fmt.Println("   register")
 	}
@@ -103,15 +115,7 @@ func (s *NotificationHub) Register(broadcastDomain string, channel chan<- interf
 		s.connMap[broadcastDomain] = append(s.connMap[broadcastDomain], guid)
 	}
 
-	// count := 0
-	// for _, conn := range s.connections {
-	// 	if conn.Connected() {
-	// 		count++
-	// 	}
-	// }
-	// fmt.Println("register connCount", count)
-
-	s.connLock.Unlock()
+	s.connLock.Release(1)
 	if *s.options.Debug {
 		fmt.Println("   register ->")
 	}
@@ -140,13 +144,13 @@ func (s *NotificationHub) UnregisterBlocking(connectionGUID string, reason error
 		fmt.Println("-> unregister   ")
 	}
 
-	s.connLock.Lock()
+	s.connLock.Acquire(context.Background(), 1)
 	if *s.options.Debug {
 		fmt.Println("   unregister   ")
 	}
 	s.unregister(connectionGUID, reason)
 
-	s.connLock.Unlock()
+	s.connLock.Release(1)
 	if *s.options.Debug {
 		fmt.Println("   unregister ->")
 	}
@@ -171,21 +175,21 @@ func (s *NotificationHub) unregister(connectionGUID string, reason error) {
 			}
 		}
 	}
-
-	// count := 0
-	// for _, conn := range s.connections {
-	// 	if conn.Connected() {
-	// 		count++
-	// 	}
-	// }
-	// fmt.Println("unregister connCount", count)
 }
 
-func (s *NotificationHub) Notify(broadcastDomain string, data interface{}) (int, error) {
+func (s *NotificationHub) Notify(broadcastDomain string, data interface{}, ctxs ...context.Context) (int, error) {
+	if len(ctxs) > 1 {
+		panic("wrong usage")
+	}
+
 	if *s.options.Debug {
 		fmt.Println("-> notify     ", data)
 	}
-	s.connLock.Lock()
+	err := s.connLock.Acquire(context.Background(), 1)
+	if err != nil {
+		return 0, err
+	}
+
 	if *s.options.Debug {
 		fmt.Println("   notify     ", data)
 	}
@@ -195,39 +199,30 @@ func (s *NotificationHub) Notify(broadcastDomain string, data interface{}) (int,
 	if connGUIDs, ok := s.connMap[broadcastDomain]; ok {
 		for _, connGUID := range connGUIDs {
 			if conn, ok := s.connections[connGUID]; ok && conn.Connected() {
-
-				if s.options.SendTimeout != nil {
-					sendContext, cancel := context.WithTimeout(context.Background(), *s.options.SendTimeout)
+				// Default: wait forever
+				ctx := context.Background()
+				if len(ctxs) == 1 {
+					// If given explicitly: highest precedence
+					ctx = ctxs[0]
+				} else if s.options.SendTimeout != nil {
+					// If not given but configured -> assign
+					var cancel context.CancelFunc
+					ctx, cancel = context.WithTimeout(ctx, *s.options.SendTimeout)
 					defer cancel()
+				}
 
-					// Send with timeout
-					select {
-					case <-sendContext.Done():
-						s.unregister(conn.ConnectionGUID(), ErrSendTimeout)
-						errs[conn.ConnectionGUID()] = ErrSendTimeout
-					case err := <-conn.Send(data, sendContext):
-						if err != nil {
-							s.unregister(conn.ConnectionGUID(), ErrSendTimeout)
-							errs[conn.ConnectionGUID()] = ErrSendTimeout
-						} else {
-							successfulSends++
-						}
-					}
+				err := <-conn.Send(data, ctx)
+				if err != nil {
+					s.unregister(connGUID, ErrSendTimeout)
+					errs[connGUID] = ErrSendTimeout
 				} else {
-					// Send without timeout
-					err := <-conn.Send(data)
-					if err != nil {
-						s.unregister(conn.ConnectionGUID(), ErrSendTimeout)
-						errs[conn.ConnectionGUID()] = ErrSendTimeout
-					} else {
-						successfulSends++
-					}
+					successfulSends++
 				}
 			}
 		}
 	}
 
-	s.connLock.Unlock()
+	s.connLock.Release(1)
 	if *s.options.Debug {
 		fmt.Println("   notify ->  ", data)
 	}

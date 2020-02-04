@@ -7,6 +7,8 @@ var ErrTooManyControlRoutines = errors.New("cannot call start more than once (to
 
 var ErrSendTimeout = errors.New("send timeout")
 var ErrConnectionClosed = errors.New("tried to send on a closed connection")
+var ErrConnectionLocked = errors.New("connection is locked")
+var ErrHubLocked = errors.New("hub is locked")
 
 type ErrNotAllReachable struct {
 	ErrMap map[string]error
