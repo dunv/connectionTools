@@ -19,6 +19,23 @@ func NewRequestResponder() *RequestResponder {
 	}
 }
 
+func (r *RequestResponder) Status(ctx context.Context) (map[string]NotificationHubStatus, error) {
+	requestHubStatus, err := r.requestHub.Status(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	responseHubStatus, err := r.responseHub.Status(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	return map[string]NotificationHubStatus{
+		"requestHub":  *requestHubStatus,
+		"responseHub": *responseHubStatus,
+	}, nil
+}
+
 func (r *RequestResponder) AddRequestChannel(domain string, requestChannel chan<- interface{}) context.CancelFunc {
 	ctx, cancelFunc := context.WithCancel(context.Background())
 	guid := r.requestHub.Register(domain, requestChannel)

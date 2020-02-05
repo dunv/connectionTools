@@ -2,8 +2,6 @@ package connectionTools
 
 type Request interface{ Match(interface{}) bool }
 
-type Response interface{ Identifier() string }
-
 type BaseRequest struct {
 	GUID string      `json:"guid"`
 	Data interface{} `json:"data"`
