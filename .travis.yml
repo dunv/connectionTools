@@ -3,7 +3,7 @@ go:
  - 1.13.x
 
 script:
- - go test -race -v -run TestRequestResponse_SuccessMultipleInput -count 100 # run this test many times. there was a race-condition deadlock in the request logic
+ - go test -race -v -run "^TestRequestResponse_SuccessMultipleInput$" -count 100 ./... # run this test many times. there was a race-condition deadlock in the request logic
  - go test -race -coverprofile=coverage.txt -covermode=atomic -v ./...
 
 after_success:
