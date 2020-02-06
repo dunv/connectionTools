@@ -4,6 +4,8 @@ github.com/dunv/concurrentList v1.0.3 h1:7zXJnm+GYxG5zD5gwBIsGyKTQpvKowfBC9RDjMz
 github.com/dunv/concurrentList v1.0.3/go.mod h1:yERVeKuu92VsZgseA/aTkzZBr60pkrDnz2s/dSXxzVY=
 github.com/dunv/concurrentList v1.0.4 h1:nFnCCV+IqC3qyctlOo6G9cP+DqhApBaf9ci9ivopEZk=
 github.com/dunv/concurrentList v1.0.4/go.mod h1:yERVeKuu92VsZgseA/aTkzZBr60pkrDnz2s/dSXxzVY=
+github.com/dunv/concurrentList v1.0.5 h1:2exEKx8SD4U9Z7V91JIWMqI4hBX1ENyhopTmS33CNfA=
+github.com/dunv/concurrentList v1.0.5/go.mod h1:yERVeKuu92VsZgseA/aTkzZBr60pkrDnz2s/dSXxzVY=
 github.com/dunv/uhelpers v1.0.4/go.mod h1:e01Y+aVv/p2Te+5P5pZb6GiaOBce9jxDXE7bpJaBez4=
 github.com/dunv/uhelpers v1.0.11 h1:oaiayyaotrgSmhvUm0tFv+IyIhgTM7g211rx1Tv3hcM=
 github.com/dunv/uhelpers v1.0.11/go.mod h1:Y8BAqY06wly5JR18Yh7vpPSZ7aR950QoxTAQZD5lE9E=
