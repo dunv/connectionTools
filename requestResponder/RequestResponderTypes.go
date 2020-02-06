@@ -1,4 +1,4 @@
-package connectionTools
+package requestResponder
 
 type Request interface{ Match(interface{}) bool }
 

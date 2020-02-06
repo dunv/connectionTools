@@ -1,4 +1,4 @@
-package connectionTools
+package requestResponder
 
 import (
 	"context"
@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	nh "github.com/dunv/connectionTools/notificationHub"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 )
@@ -16,7 +17,7 @@ func TestRequestResponse_NoOneListeningError(t *testing.T) {
 
 	responseChannel := requestResponder.Request(domain, &BaseRequest{GUID: uuid.New().String()})
 	_, err := ExtractErr(<-responseChannel)
-	assert.EqualError(t, err, ErrNoOneListeningToRequest.Error())
+	assert.EqualError(t, err, nh.ErrNoOneListeningToRequest.Error())
 }
 
 func TestRequestResponse_Success(t *testing.T) {

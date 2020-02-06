@@ -1,4 +1,4 @@
-package connectionTools
+package notificationHub
 
 import (
 	"context"

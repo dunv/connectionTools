@@ -1,25 +1,26 @@
-package connectionTools
+package requestResponder
 
 import (
 	"context"
 
+	nh "github.com/dunv/connectionTools/notificationHub"
 	"github.com/dunv/uhelpers"
 	"github.com/dunv/ulog"
 )
 
 type RequestResponder struct {
-	responseHub *NotificationHub
-	requestHub  *NotificationHub
+	responseHub *nh.NotificationHub
+	requestHub  *nh.NotificationHub
 }
 
 func NewRequestResponder() *RequestResponder {
 	return &RequestResponder{
-		responseHub: NewNotificationHub(NotificationHubOptions{Debug: uhelpers.PtrToBool(false)}),
-		requestHub:  NewNotificationHub(NotificationHubOptions{Debug: uhelpers.PtrToBool(false)}),
+		responseHub: nh.NewNotificationHub(nh.NotificationHubOptions{Debug: uhelpers.PtrToBool(false)}),
+		requestHub:  nh.NewNotificationHub(nh.NotificationHubOptions{Debug: uhelpers.PtrToBool(false)}),
 	}
 }
 
-func (r *RequestResponder) Status(ctx context.Context) (map[string]NotificationHubStatus, error) {
+func (r *RequestResponder) Status(ctx context.Context) (map[string]nh.NotificationHubStatus, error) {
 	requestHubStatus, err := r.requestHub.Status(ctx)
 	if err != nil {
 		return nil, err
@@ -30,7 +31,7 @@ func (r *RequestResponder) Status(ctx context.Context) (map[string]NotificationH
 		return nil, err
 	}
 
-	return map[string]NotificationHubStatus{
+	return map[string]nh.NotificationHubStatus{
 		"requestHub":  *requestHubStatus,
 		"responseHub": *responseHubStatus,
 	}, nil
@@ -106,7 +107,7 @@ func (r *RequestResponder) Request(domain string, request Request, ctx ...contex
 	go func() {
 		sends, _ := r.requestHub.Notify(domain, request)
 		if sends == 0 {
-			matchedResponseChannel <- ErrNoOneListeningToRequest
+			matchedResponseChannel <- nh.ErrNoOneListeningToRequest
 			// close(matchedResponseChannel)
 		}
 	}()
