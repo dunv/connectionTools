@@ -37,6 +37,12 @@ type SendQueue struct {
 	lock sync.Mutex
 }
 
+type SendItem struct {
+	item     interface{}
+	priority int
+	sendFunc func(interface{}) error
+}
+
 func NewSendQueue(send SendQueueFunc, ctx context.Context, opts ...SendQueueOption) *SendQueue {
 	mergedOpts := sendQueueOptions{
 		keepSendReportsFor: 24 * time.Hour,
@@ -72,8 +78,18 @@ func (p *SendQueue) Length() int {
 	return p.list.Length()
 }
 
+func (p *SendQueue) PushWithSendFunc(item interface{}, fn func(interface{}) error) {
+	p.list.Append(SendItem{
+		item:     item,
+		sendFunc: fn,
+	})
+}
+
 func (p *SendQueue) Push(item interface{}) {
-	p.list.Append(item)
+	p.list.Append(SendItem{
+		item:     item,
+		sendFunc: p.send,
+	})
 }
 
 func (p *SendQueue) run() {
@@ -86,7 +102,7 @@ func (p *SendQueue) run() {
 		default:
 		}
 
-		item, err := p.list.GetNextWithContext(p.ctx)
+		sendItem, err := p.list.GetNextWithContext(p.ctx)
 		if err != nil {
 			ulog.Errorf("could not getNext (%s)", err)
 			continue
@@ -104,7 +120,9 @@ func (p *SendQueue) run() {
 		var duration time.Duration
 
 		for {
-			err = p.send(item)
+			item := sendItem.(SendItem).item
+			sendFunc := sendItem.(SendItem).sendFunc
+			err = sendFunc(item)
 			if err != nil {
 				time.Sleep(backoff)
 
@@ -144,7 +162,7 @@ func (p *SendQueue) run() {
 
 		p.sendReports.Append(SendReport{
 			Time:     time.Now(),
-			Item:     item,
+			Item:     sendItem,
 			Duration: duration,
 			Retries:  retries,
 			Success:  success,
