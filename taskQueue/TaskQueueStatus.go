@@ -22,6 +22,8 @@ type TaskQueueStatus struct {
 	MinFailureDuration     time.Duration    `json:"minFailureDuration"`
 	MaxFailureDuration     time.Duration    `json:"maxFailureDuration"`
 	AverageFailureDuration time.Duration    `json:"averageFailureDuration"`
+
+	Reports []TaskReport `json:"-"`
 }
 
 func (s TaskQueueStatus) String() string {
@@ -76,8 +78,12 @@ func statusFromTaskQueue(p *TaskQueue) TaskQueueStatus {
 	sumFailureDuration := time.Duration(0)
 	failureCount := 0
 
-	for _, taskReport := range p.reports.GetWithFilter(func(item interface{}) bool { return true }) {
+	reportsRaw := p.reports.GetWithFilter(func(item interface{}) bool { return true })
+	reports := []TaskReport{}
+
+	for _, taskReport := range reportsRaw {
 		report := taskReport.(TaskReport)
+		reports = append(reports, report)
 		if report.Time.Before(start) {
 			start = report.Time
 		}
@@ -114,6 +120,7 @@ func statusFromTaskQueue(p *TaskQueue) TaskQueueStatus {
 		First:                  start,
 		Last:                   end,
 		Options:                p.defaultOpts,
+		Reports:                reports,
 	}
 
 	if successCount > 0 {

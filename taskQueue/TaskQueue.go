@@ -8,11 +8,13 @@ import (
 
 	"github.com/dunv/concurrentList"
 	"github.com/dunv/ulog"
+	"github.com/google/uuid"
 )
 
 type TaskQueueFunc func(context context.Context) error
 
 type TaskReport struct {
+	TaskGUID uuid.UUID
 	Time     time.Time
 	Item     interface{}
 	Duration time.Duration
@@ -36,9 +38,10 @@ type TaskQueue struct {
 	lock sync.Mutex
 }
 
-type Task struct {
-	opts taskQueueOptions
-	fn   TaskQueueFunc
+type task struct {
+	taskGUID uuid.UUID
+	opts     taskQueueOptions
+	fn       TaskQueueFunc
 }
 
 func NewTaskQueue(ctx context.Context, opts ...TaskQueueOption) *TaskQueue {
@@ -49,20 +52,30 @@ func NewTaskQueue(ctx context.Context, opts ...TaskQueueOption) *TaskQueue {
 		backoffInitial:     0,
 		backoffFactor:      1,
 		backoffLimit:       1,
+		priority:           1000,
 		ctx:                context.Background(),
 	}
 	for _, opt := range opts {
 		opt.apply(&mergedOpts)
 	}
 
+	// Passing a sortFn to concurrentList makes it a "priorityQueue"
+	sortFn := func(i, j interface{}) bool {
+		return i.(task).opts.priority > j.(task).opts.priority
+	}
+
 	queue := &TaskQueue{
-		list:              concurrentList.NewConcurrentList(),
+		list:              concurrentList.NewConcurrentList(concurrentList.WithSorting(sortFn)),
 		ctx:               ctx,
 		successfulByRetry: make(map[int]int),
 		reports:           concurrentList.NewConcurrentList(),
 		defaultOpts:       mergedOpts,
 	}
-	go queue.run()
+
+	if !mergedOpts.startManually {
+		go queue.run()
+	}
+
 	return queue
 }
 
@@ -77,17 +90,20 @@ func (p *TaskQueue) Length() int {
 	return p.list.Length()
 }
 
-func (p *TaskQueue) Push(fn TaskQueueFunc, opts ...TaskQueueOption) {
+func (p *TaskQueue) Push(fn TaskQueueFunc, opts ...TaskQueueOption) uuid.UUID {
 	// single tasks can have their own options
 	mergedOpts := p.defaultOpts
 	for _, opt := range opts {
 		opt.apply(&mergedOpts)
 	}
 
-	p.list.Append(Task{
-		fn:   fn,
-		opts: mergedOpts,
+	GUID := uuid.New()
+	p.list.Append(task{
+		taskGUID: GUID,
+		fn:       fn,
+		opts:     mergedOpts,
 	})
+	return GUID
 }
 
 func (p *TaskQueue) run() {
@@ -106,7 +122,7 @@ func (p *TaskQueue) run() {
 			continue
 		}
 
-		task := taskRaw.(Task)
+		task := taskRaw.(task)
 
 		p.lock.Lock()
 		p.sendInProgress = true
@@ -159,6 +175,7 @@ func (p *TaskQueue) run() {
 		p.lock.Unlock()
 
 		p.reports.Append(TaskReport{
+			TaskGUID: task.taskGUID,
 			Time:     time.Now(),
 			Item:     task,
 			Duration: duration,

@@ -17,7 +17,9 @@ type taskQueueOptions struct {
 	keepTaskReportsFor time.Duration
 	successChannel     *chan struct{}
 	failureChannel     *chan error
+	priority           int
 	ctx                context.Context
+	startManually      bool
 }
 
 type funcTaskQueueOption struct {
@@ -66,5 +68,18 @@ func WithFailureChannel(c chan error) TaskQueueOption {
 func WithContext(c context.Context) TaskQueueOption {
 	return newFuncTaskQueueOption(func(o *taskQueueOptions) {
 		o.ctx = c
+	})
+}
+
+func WithPriority(priority int) TaskQueueOption {
+	return newFuncTaskQueueOption(func(o *taskQueueOptions) {
+		o.priority = priority
+	})
+}
+
+// for testing only
+func withStartManually() TaskQueueOption {
+	return newFuncTaskQueueOption(func(o *taskQueueOptions) {
+		o.startManually = true
 	})
 }
