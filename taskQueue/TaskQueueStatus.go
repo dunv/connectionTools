@@ -1,4 +1,4 @@
-package sendQueue
+package taskQueue
 
 import (
 	"fmt"
@@ -6,16 +6,16 @@ import (
 	"time"
 )
 
-type SendQueueStatus struct {
-	QueueLength                 int         `json:"queueLength"`
-	TotalSuccessfulSends        int         `json:"totalSuccessfulSends"`
-	TotalSuccessfulSendsByRetry map[int]int `json:"totalSuccessfulSendsByRetry"`
-	TotalFailedSends            int         `json:"totalFailedSends"`
-	SendInProgress              bool        `json:"sendInProgress"`
+type TaskQueueStatus struct {
+	QueueLength            int         `json:"queueLength"`
+	TotalSuccessful        int         `json:"totalSuccessful"`
+	TotalSuccessfulByRetry map[int]int `json:"totalSuccessfulByRetry"`
+	TotalFailed            int         `json:"totalFailed"`
+	InProgress             bool        `json:"inProgress"`
 
-	Options                sendQueueOptions `json:"sendQueueOptions"`
-	FirstMessage           time.Time        `json:"firstMessage"`
-	LastMessage            time.Time        `json:"lastMessage"`
+	Options                taskQueueOptions `json:"taskQueueOptions"`
+	First                  time.Time        `json:"first"`
+	Last                   time.Time        `json:"last"`
 	MinSuccessDuration     time.Duration    `json:"minSuccessDuration"`
 	MaxSuccessDuration     time.Duration    `json:"maxSuccessDuration"`
 	AverageSuccessDuration time.Duration    `json:"averageSuccessDuration"`
@@ -24,17 +24,17 @@ type SendQueueStatus struct {
 	AverageFailureDuration time.Duration    `json:"averageFailureDuration"`
 }
 
-func (s SendQueueStatus) String() string {
-	return fmt.Sprintf("SendQueue[length: %d, sendInProgress: %t, successfulSends: %d, failedSends: %d]",
-		s.QueueLength, s.SendInProgress, s.TotalSuccessfulSends, s.TotalFailedSends)
+func (s TaskQueueStatus) String() string {
+	return fmt.Sprintf("TaskQueue[length: %d, inProgress: %t, successful: %d, failed: %d]",
+		s.QueueLength, s.InProgress, s.TotalSuccessful, s.TotalFailed)
 }
 
-func (s SendQueueStatus) Pretty() string {
+func (s TaskQueueStatus) Pretty() string {
 	return fmt.Sprintf(`SendQueueStatus [
-	queueLength:          %d
-	totalSuccessfulSends: %d
-	totalFailedSends:     %d
-	sendInProgress:       %t
+	queueLength:        %d
+	totalSuccessful:    %d
+	totalFailed:        %d
+	inProgress:         %t
 
 	// LAST %s
 	firstMessage:       %s
@@ -47,12 +47,12 @@ func (s SendQueueStatus) Pretty() string {
 	avgFailureDuration: %s
 ] `,
 		s.QueueLength,
-		s.TotalSuccessfulSends,
-		s.TotalFailedSends,
-		s.SendInProgress,
-		s.Options.keepSendReportsFor,
-		s.FirstMessage.Format(time.RFC3339),
-		s.LastMessage.Format(time.RFC3339),
+		s.TotalSuccessful,
+		s.TotalFailed,
+		s.InProgress,
+		s.Options.keepTaskReportsFor,
+		s.First.Format(time.RFC3339),
+		s.Last.Format(time.RFC3339),
 		s.MinSuccessDuration,
 		s.MaxSuccessDuration,
 		s.AverageSuccessDuration,
@@ -62,10 +62,10 @@ func (s SendQueueStatus) Pretty() string {
 	)
 }
 
-func statusFromSendQueue(p *SendQueue) SendQueueStatus {
+func statusFromTaskQueue(p *TaskQueue) TaskQueueStatus {
 
 	start := time.Now().Add(24 * time.Hour)
-	end := time.Now().Add(-p.opts.keepSendReportsFor)
+	end := time.Now().Add(-p.defaultOpts.keepTaskReportsFor)
 	minSuccessDuration := time.Duration(math.MaxInt64)
 	maxSuccessDuration := time.Duration(0)
 	sumSuccessDuration := time.Duration(0)
@@ -76,8 +76,8 @@ func statusFromSendQueue(p *SendQueue) SendQueueStatus {
 	sumFailureDuration := time.Duration(0)
 	failureCount := 0
 
-	for _, sendReport := range p.sendReports.GetWithFilter(func(item interface{}) bool { return true }) {
-		report := sendReport.(SendReport)
+	for _, taskReport := range p.reports.GetWithFilter(func(item interface{}) bool { return true }) {
+		report := taskReport.(TaskReport)
 		if report.Time.Before(start) {
 			start = report.Time
 		}
@@ -105,15 +105,15 @@ func statusFromSendQueue(p *SendQueue) SendQueueStatus {
 		}
 	}
 
-	status := SendQueueStatus{
-		QueueLength:                 p.Length(),
-		SendInProgress:              p.sendInProgress,
-		TotalSuccessfulSends:        p.successfulSends,
-		TotalSuccessfulSendsByRetry: p.successfulSendsByRetry,
-		TotalFailedSends:            p.failedSends,
-		FirstMessage:                start,
-		LastMessage:                 end,
-		Options:                     p.opts,
+	status := TaskQueueStatus{
+		QueueLength:            p.Length(),
+		InProgress:             p.sendInProgress,
+		TotalSuccessful:        p.successful,
+		TotalSuccessfulByRetry: p.successfulByRetry,
+		TotalFailed:            p.failed,
+		First:                  start,
+		Last:                   end,
+		Options:                p.defaultOpts,
 	}
 
 	if successCount > 0 {
