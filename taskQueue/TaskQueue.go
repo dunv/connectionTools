@@ -136,7 +136,22 @@ func (p *TaskQueue) run() {
 		var duration time.Duration
 
 		for {
-			err = task.fn(withContext(task.opts, retries, backoff))
+			// Setup context for fn-execution
+			var cancel context.CancelFunc
+			ctx := withContext(task.opts, retries, backoff)
+			if task.opts.timeout != nil {
+				ctx, cancel = context.WithTimeout(ctx, *task.opts.timeout)
+			}
+
+			// Execute fn
+			err = task.fn(ctx)
+
+			// Cleanup context
+			if cancel != nil {
+				cancel()
+			}
+
+			// Calculate backoff and retries
 			if err != nil {
 				time.Sleep(backoff)
 

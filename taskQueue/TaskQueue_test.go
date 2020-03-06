@@ -2,6 +2,7 @@ package taskQueue
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math/rand"
 	"testing"
@@ -27,6 +28,7 @@ func TestTaskQueue_Default(t *testing.T) {
 	sendQueue.Push(successOnThirdTryFn)
 	sendQueue.Push(successOnTenthTryFn)
 
+	// Wait until finished
 	for sendQueue.Status().QueueLength > 0 || sendQueue.Status().InProgress {
 		time.Sleep(100 * time.Millisecond)
 	}
@@ -46,6 +48,7 @@ func TestTaskQueue_MaxRetry_ByTask(t *testing.T) {
 	sendQueue.Push(successOnThirdTryFn, WithMaxRetries(2))
 	sendQueue.Push(successOnTenthTryFn, WithMaxRetries(2))
 
+	// Wait until finished
 	for sendQueue.Status().QueueLength > 0 || sendQueue.Status().InProgress {
 		time.Sleep(100 * time.Millisecond)
 	}
@@ -65,6 +68,7 @@ func TestTaskQueue_MaxRetry_ByDefault(t *testing.T) {
 	sendQueue.Push(successOnThirdTryFn)
 	sendQueue.Push(successOnTenthTryFn)
 
+	// Wait until finished
 	for sendQueue.Status().QueueLength > 0 || sendQueue.Status().InProgress {
 		time.Sleep(100 * time.Millisecond)
 	}
@@ -89,6 +93,7 @@ func TestTaskQueue_Priority(t *testing.T) {
 	// run manually
 	go queue.run()
 
+	// Wait until finished
 	for queue.Status().QueueLength > 0 || queue.Status().InProgress {
 		time.Sleep(100 * time.Millisecond)
 	}
@@ -108,6 +113,99 @@ func TestTaskQueue_Priority(t *testing.T) {
 	}
 
 	require.Equal(t, 3, status.TotalSuccessful)
+	require.Equal(t, 0, status.TotalFailed)
+	require.Equal(t, 0, status.QueueLength)
+}
+
+// Fn that runs into timeout
+func TestTaskQueue_Timeout_Error(t *testing.T) {
+	opt := setup(t)
+	sendQueue := NewTaskQueue(context.Background(), opt)
+
+	// Function which completes successfully after one second, if it is interrupted by context -> will return error
+	// Queued with a timeout of 100ms -> should error out
+	sendQueue.Push(func(ctx context.Context) error {
+		_, ok := ctx.Deadline()
+		if !ok {
+			return errors.New("there is no deadline but there should be")
+		}
+
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(time.Second):
+			return nil
+		}
+	}, WithTimeout(100*time.Millisecond), WithMaxRetries(1))
+
+	// Wait until finished
+	for sendQueue.Status().QueueLength > 0 || sendQueue.Status().InProgress {
+		time.Sleep(100 * time.Millisecond)
+	}
+
+	status := sendQueue.Status()
+	require.Equal(t, 0, status.TotalSuccessful)
+	require.Equal(t, 1, status.TotalFailed)
+	require.Equal(t, 0, status.QueueLength)
+}
+
+// Fn that does not run into timeout, but a timeout is configured
+func TestTaskQueue_Timeout_Success(t *testing.T) {
+	opt := setup(t)
+	sendQueue := NewTaskQueue(context.Background(), opt)
+
+	// Function which completes successfully after 50ms, if it is interrupted by context -> will return error
+	// Queued with a timeout of 100ms -> should return successfully
+	sendQueue.Push(func(ctx context.Context) error {
+		_, ok := ctx.Deadline()
+		if !ok {
+			return errors.New("there is no deadline but there should be")
+		}
+
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(50 * time.Millisecond):
+			return nil
+		}
+	}, WithTimeout(100*time.Millisecond), WithMaxRetries(1))
+
+	// Wait until finished
+	for sendQueue.Status().QueueLength > 0 || sendQueue.Status().InProgress {
+		time.Sleep(100 * time.Millisecond)
+	}
+
+	status := sendQueue.Status()
+	require.Equal(t, 1, status.TotalSuccessful)
+	require.Equal(t, 0, status.TotalFailed)
+	require.Equal(t, 0, status.QueueLength)
+}
+
+// Fn that does not run into timeout (making sure no timeout is passed into it)
+func TestTaskQueue_Timeout_NoTimeout(t *testing.T) {
+	opt := setup(t)
+	sendQueue := NewTaskQueue(context.Background(), opt)
+
+	sendQueue.Push(func(ctx context.Context) error {
+		_, ok := ctx.Deadline()
+		if ok {
+			return errors.New("there is a deadline but there should not be")
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(500 * time.Millisecond):
+			return nil
+		}
+	}, WithMaxRetries(1))
+
+	// Wait until finished
+	for sendQueue.Status().QueueLength > 0 || sendQueue.Status().InProgress {
+		time.Sleep(100 * time.Millisecond)
+	}
+
+	status := sendQueue.Status()
+	require.Equal(t, 1, status.TotalSuccessful)
 	require.Equal(t, 0, status.TotalFailed)
 	require.Equal(t, 0, status.QueueLength)
 }

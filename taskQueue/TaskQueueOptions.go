@@ -20,6 +20,7 @@ type taskQueueOptions struct {
 	priority           int
 	ctx                context.Context
 	startManually      bool
+	timeout            *time.Duration
 }
 
 type funcTaskQueueOption struct {
@@ -74,6 +75,12 @@ func WithContext(c context.Context) TaskQueueOption {
 func WithPriority(priority int) TaskQueueOption {
 	return newFuncTaskQueueOption(func(o *taskQueueOptions) {
 		o.priority = priority
+	})
+}
+
+func WithTimeout(timeout time.Duration) TaskQueueOption {
+	return newFuncTaskQueueOption(func(o *taskQueueOptions) {
+		o.timeout = &timeout
 	})
 }
 
