@@ -18,6 +18,8 @@ func TestRequestResponse_NoOneListeningError(t *testing.T) {
 	responseChannel := requestResponder.Request(domain, &BaseRequest{GUID: uuid.New().String()})
 	_, err := ExtractErr(<-responseChannel)
 	assert.EqualError(t, err, nh.ErrNoOneListeningToRequest.Error())
+
+	waitForSubscriptions(t, requestResponder)
 }
 
 func TestRequestResponse_Success(t *testing.T) {
@@ -26,11 +28,9 @@ func TestRequestResponse_Success(t *testing.T) {
 
 	requestsChannel := make(chan interface{})
 	cancelRequests := requestResponder.AddRequestChannel(domain, requestsChannel)
-	defer cancelRequests()
 
 	responsesChannel := make(chan interface{})
 	cancelResponse := requestResponder.AddResponseChannel(domain, responsesChannel)
-	defer cancelResponse()
 
 	// Inject traffic
 	go publishRandomResponses("no match", 99, 100000, responsesChannel)
@@ -50,6 +50,10 @@ func TestRequestResponse_Success(t *testing.T) {
 	assert.IsType(t, &BaseResponse{}, res)
 	assert.IsType(t, "", res.(*BaseResponse).Data)
 	assert.Equal(t, requestData, res.(*BaseResponse).Data.(string))
+
+	cancelRequests()
+	cancelResponse()
+	waitForSubscriptions(t, requestResponder)
 }
 
 func TestRequestResponse_RequestTimeout(t *testing.T) {
@@ -58,7 +62,6 @@ func TestRequestResponse_RequestTimeout(t *testing.T) {
 
 	requestsChannel := make(chan interface{})
 	cancelRequests := requestResponder.AddRequestChannel(domain, requestsChannel)
-	defer cancelRequests()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
 	defer cancel()
@@ -66,6 +69,9 @@ func TestRequestResponse_RequestTimeout(t *testing.T) {
 
 	_, err := ExtractErr(<-responseChannel)
 	assert.EqualError(t, err, context.DeadlineExceeded.Error())
+
+	cancelRequests()
+	waitForSubscriptions(t, requestResponder)
 }
 
 func TestRequestResponse_RequestCancelled(t *testing.T) {
@@ -74,7 +80,6 @@ func TestRequestResponse_RequestCancelled(t *testing.T) {
 
 	requestsChannel := make(chan interface{})
 	cancelRequests := requestResponder.AddRequestChannel(domain, requestsChannel)
-	defer cancelRequests()
 
 	ctx, cancel := context.WithCancel(context.Background())
 	responseChannel := requestResponder.Request(domain, &BaseRequest{GUID: uuid.New().String()}, ctx)
@@ -82,6 +87,9 @@ func TestRequestResponse_RequestCancelled(t *testing.T) {
 
 	_, err := ExtractErr(<-responseChannel)
 	assert.EqualError(t, err, context.Canceled.Error())
+
+	cancelRequests()
+	waitForSubscriptions(t, requestResponder)
 }
 
 func TestRequestResponse_SuccessMultipleInput(t *testing.T) {
@@ -125,6 +133,7 @@ func TestRequestResponse_SuccessMultipleInput(t *testing.T) {
 	stopConsuming2()
 	stopConsuming3()
 	stopConsuming4()
+	waitForSubscriptions(t, requestResponder)
 }
 
 func publishRandomResponses(correctGUID string, correctIndex int, length int, channel chan interface{}) {
@@ -151,4 +160,33 @@ func publishResponse(correctGUID string, requestChannel chan interface{}, respon
 			responseChannel <- &BaseResponse{CorrelationGUID: correctGUID, Data: requestData}
 		}
 	}
+}
+
+// check every 100ms for 1s that all subscriptions have been removed
+func waitForSubscriptions(t *testing.T, requestResponder *RequestResponder) {
+	waitForSubscriptionsToBeDone, cancelFunc := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancelFunc()
+	for {
+		subTimeout, cancelFunc := context.WithTimeout(context.Background(), 50*time.Millisecond)
+		defer cancelFunc()
+		status, err := requestResponder.Status(subTimeout)
+		assert.NoError(t, err)
+		if err != nil {
+			return
+		}
+
+		assert.NoError(t, waitForSubscriptionsToBeDone.Err(), "there were still subcriptions left")
+		if err := waitForSubscriptionsToBeDone.Err(); err != nil {
+			return
+		}
+
+		if len(status["requestHub"].Connections) == 0 && len(status["responseHub"].Connections) == 0 {
+			break
+		}
+
+		time.Sleep(100 * time.Millisecond)
+	}
+
+	// i had an error where a connection received the stop command twice -> try to wait long enough
+	time.Sleep(2 * time.Second)
 }

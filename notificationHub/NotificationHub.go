@@ -122,31 +122,15 @@ func (s *NotificationHub) Register(broadcastDomain string, channel chan<- interf
 	return guid
 }
 
-// Unregister from hub
-// this is asyncronous so we cannot get stuck in a deadlock, when we
-// - listen to messages
-// - want to unregister when we received the one we wanted
-// - the next message is already being sent onto the channel
-// 	   -> notify blocks (locking) until the outgoing channel is read
-//     -> if we unregister in the same goroutine as we are reading the outgoing-channel
-// 	   -> deadlock
-func (s *NotificationHub) Unregister(connectionGUID string, reason error) {
-	go func() {
-		s.UnregisterBlocking(connectionGUID, reason)
-	}()
-}
-
-// UnregisterBlocking from hub. ONLY USE THIS IF YOU KNOW WHAT YOU ARE DOING
-// This is mainly included for testing and special cases where we need to be sure, that
-// no more messages are sent after this call is through
-func (s *NotificationHub) UnregisterBlocking(connectionGUID string, reason error) {
+// Unregister from Hub
+func (s *NotificationHub) Unregister(connectionGUID string, reason error, ctx context.Context) error {
 	if *s.options.Debug {
 		fmt.Println("-> unregister   ")
 	}
 
-	err := s.connLock.Acquire(context.Background(), 1)
+	err := s.connLock.Acquire(ctx, 1)
 	if err != nil {
-		panic(err)
+		return err
 	}
 
 	if *s.options.Debug {
@@ -158,11 +142,17 @@ func (s *NotificationHub) UnregisterBlocking(connectionGUID string, reason error
 	if *s.options.Debug {
 		fmt.Println("   unregister ->")
 	}
+
+	return nil
 }
 
 func (s *NotificationHub) unregister(connectionGUID string, reason error) {
 	if *s.options.Debug {
-		fmt.Printf("unregistering %s (%s) \n", connectionGUID, reason)
+		if reason != nil {
+			fmt.Printf("unregistering %s (%s) \n", connectionGUID, reason)
+		} else {
+			fmt.Printf("unregistering %s (no reason given) \n", connectionGUID)
+		}
 	}
 	if conn, ok := s.connections[connectionGUID]; ok {
 		<-conn.Stop(reason)
@@ -186,10 +176,22 @@ func (s *NotificationHub) Notify(broadcastDomain string, data interface{}, ctxs 
 		panic("wrong usage")
 	}
 
+	// Default: wait forever
+	ctx := context.Background()
+	if len(ctxs) == 1 {
+		// If given explicitly: highest precedence
+		ctx = ctxs[0]
+	} else if s.options.SendTimeout != nil {
+		// If not given but configured -> assign
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, *s.options.SendTimeout)
+		defer cancel()
+	}
+
 	if *s.options.Debug {
 		fmt.Println("-> notify     ", data)
 	}
-	err := s.connLock.Acquire(context.Background(), 1)
+	err := s.connLock.Acquire(ctx, 1)
 	if err != nil {
 		return 0, err
 	}
@@ -203,21 +205,9 @@ func (s *NotificationHub) Notify(broadcastDomain string, data interface{}, ctxs 
 	if connGUIDs, ok := s.connMap[broadcastDomain]; ok {
 		for _, connGUID := range connGUIDs {
 			if conn, ok := s.connections[connGUID]; ok && conn.Connected() {
-				// Default: wait forever
-				ctx := context.Background()
-				if len(ctxs) == 1 {
-					// If given explicitly: highest precedence
-					ctx = ctxs[0]
-				} else if s.options.SendTimeout != nil {
-					// If not given but configured -> assign
-					var cancel context.CancelFunc
-					ctx, cancel = context.WithTimeout(ctx, *s.options.SendTimeout)
-					defer cancel()
-				}
-
 				err := <-conn.Send(data, ctx)
 				if err != nil {
-					s.unregister(connGUID, ErrSendTimeout)
+					// s.unregister(connGUID, ErrSendTimeout)
 					errs[connGUID] = ErrSendTimeout
 				} else {
 					successfulSends++

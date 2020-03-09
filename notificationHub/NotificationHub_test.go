@@ -2,6 +2,7 @@ package notificationHub
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -119,8 +120,11 @@ func TestNotificationHubConnection_WithUnregister(t *testing.T) {
 		}
 	}
 
-	// Use blocking -> we know what we are doing
-	hub.UnregisterBlocking(connGUID, nil)
+	err := hub.Unregister(connGUID, nil, context.Background())
+	assert.NoError(t, err)
+	if err != nil {
+		return
+	}
 
 	go func() {
 		for i := 0; i < len(expectedMessages); i++ {
@@ -185,7 +189,7 @@ func TestNotificationHubConnection_NoTimeoutConfigured(t *testing.T) {
 
 func TestNotificationHubConnection_WithTimeout1(t *testing.T) {
 	hub := NewNotificationHub(NotificationHubOptions{SendTimeout: uhelpers.PtrToDuration(10 * time.Millisecond)})
-	hub.Register("test", make(chan interface{}))
+	guid := hub.Register("test", make(chan interface{}))
 
 	done := make(chan bool)
 	go func() {
@@ -202,8 +206,17 @@ func TestNotificationHubConnection_WithTimeout1(t *testing.T) {
 	case <-done:
 	}
 
+	err := hub.Unregister(guid, errors.New("my reason"), context.Background())
+	assert.NoError(t, err)
+	if err != nil {
+		return
+	}
+
 	status, err := hub.Status(context.Background())
 	assert.NoError(t, err)
+	if err != nil {
+		return
+	}
 	assert.Len(t, status.Connections, 0, "expected no connections to be left")
 	assert.Len(t, status.Registry, 0)
 }
@@ -446,7 +459,11 @@ func TestNotificationHubRegistry_PreservingOrder(t *testing.T) {
 		}
 	}
 
-	hub.UnregisterBlocking(guid1, nil)
+	err = hub.Unregister(guid1, nil, context.Background())
+	assert.NoError(t, err)
+	if err != nil {
+		return
+	}
 
 	status, err = hub.Status(context.Background())
 	assert.NoError(t, err)
@@ -506,7 +523,12 @@ func TestNotificationHubRegistry_MultipleDomains(t *testing.T) {
 		}
 	}
 
-	hub.UnregisterBlocking(guid1, nil)
+	err = hub.Unregister(guid1, nil, context.Background())
+	assert.NoError(t, err)
+	if err != nil {
+		return
+	}
+
 	status, err = hub.Status(context.Background())
 	assert.NoError(t, err)
 	assert.Len(t, status.Registry, 1)
@@ -530,7 +552,9 @@ func startReceiving(t *testing.T, hub *NotificationHub, domain string, expectedM
 			assert.Equal(t, expectedMessages[i], msg)
 			i++
 			if len(expectedMessages) == i {
-				hub.UnregisterBlocking(guid, nil)
+				err := hub.Unregister(guid, nil, context.Background())
+				assert.NoError(t, err)
+
 				done <- true
 				return
 			}
