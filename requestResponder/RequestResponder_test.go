@@ -68,7 +68,12 @@ func TestRequestResponse_RequestTimeout(t *testing.T) {
 	responseChannel := requestResponder.Request(domain, &BaseRequest{GUID: uuid.New().String()}, ctx)
 
 	_, err := ExtractErr(<-responseChannel)
-	assert.EqualError(t, err, context.DeadlineExceeded.Error())
+	if !assert.EqualError(t, err, context.DeadlineExceeded.Error()) {
+		// TODO: this happens very rarely: investigate
+		status, err := requestResponder.Status(context.Background())
+		fmt.Println("status", status, err)
+		panic(err)
+	}
 
 	cancelRequests()
 	waitForSubscriptions(t, requestResponder)
@@ -86,7 +91,12 @@ func TestRequestResponse_RequestCancelled(t *testing.T) {
 	cancel()
 
 	_, err := ExtractErr(<-responseChannel)
-	assert.EqualError(t, err, context.Canceled.Error())
+	if !assert.EqualError(t, err, context.Canceled.Error()) {
+		// TODO: this happens very rarely: investigate
+		status, err := requestResponder.Status(context.Background())
+		fmt.Println("status", status, err)
+		panic(err)
+	}
 
 	cancelRequests()
 	waitForSubscriptions(t, requestResponder)
