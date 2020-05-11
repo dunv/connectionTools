@@ -38,51 +38,55 @@ func TestTaskQueue_Default(t *testing.T) {
 	opt := setup(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	sendQueue := NewTaskQueue(ctx, opt)
-	sendQueue.Push(successOnFirstTryFn)
-	sendQueue.Push(successOnSecondTryFn)
-	sendQueue.Push(successOnThirdTryFn)
-	sendQueue.Push(successOnTenthTryFn)
-	waitUntilFinished(sendQueue)
+	queue := NewTaskQueue(ctx, opt)
+	queue.Push(successOnFirstTryFn)
+	queue.Push(successOnSecondTryFn)
+	queue.Push(successOnThirdTryFn)
+	queue.Push(successOnTenthTryFn)
+	waitUntilFinished(queue)
 
-	status := sendQueue.DetailedStatus()
+	status := queue.DetailedStatus()
 	assert.Equal(t, 4, status.TotalSuccessful, "totalSuccessful")
 	assert.Equal(t, 0, status.TotalFailed, "totalFailed")
 }
 
 func TestTaskQueue_MaxRetry_ByTask(t *testing.T) {
 	opt := setup(t)
-	sendQueue := NewTaskQueue(context.Background(), opt)
-	sendQueue.Push(successOnFirstTryFn, WithMaxRetries(2))
-	sendQueue.Push(successOnSecondTryFn, WithMaxRetries(2))
-	sendQueue.Push(successOnThirdTryFn, WithMaxRetries(2))
-	sendQueue.Push(successOnTenthTryFn, WithMaxRetries(2))
-	waitUntilFinished(sendQueue)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	queue := NewTaskQueue(ctx, opt)
+	queue.Push(successOnFirstTryFn, WithMaxRetries(2))
+	queue.Push(successOnSecondTryFn, WithMaxRetries(2))
+	queue.Push(successOnThirdTryFn, WithMaxRetries(2))
+	queue.Push(successOnTenthTryFn, WithMaxRetries(2))
+	waitUntilFinished(queue)
 
-	status := sendQueue.DetailedStatus()
+	status := queue.DetailedStatus()
 	require.Equal(t, 2, status.TotalSuccessful)
 	require.Equal(t, 2, status.TotalFailed)
 }
 
 func TestTaskQueue_MaxRetry_ByDefault(t *testing.T) {
 	opt := setup(t)
-	sendQueue := NewTaskQueue(context.Background(), opt, WithMaxRetries(2))
-	sendQueue.Push(successOnFirstTryFn)
-	sendQueue.Push(successOnSecondTryFn)
-	sendQueue.Push(successOnThirdTryFn)
-	sendQueue.Push(successOnTenthTryFn)
-	waitUntilFinished(sendQueue)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	queue := NewTaskQueue(ctx, opt, WithMaxRetries(2))
+	queue.Push(successOnFirstTryFn)
+	queue.Push(successOnSecondTryFn)
+	queue.Push(successOnThirdTryFn)
+	queue.Push(successOnTenthTryFn)
+	waitUntilFinished(queue)
 
-	status := sendQueue.DetailedStatus()
+	status := queue.DetailedStatus()
 	require.Equal(t, 2, status.TotalSuccessful)
 	require.Equal(t, 2, status.TotalFailed)
 }
 
 func TestTaskQueue_Priority(t *testing.T) {
 	opt := setup(t)
-
-	// setup WithStartManually (this way we can schedule everything first and then start)
-	queue := NewTaskQueue(context.Background(), opt, withStartManually())
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	queue := NewTaskQueue(ctx, opt, withStartManually())
 
 	firstTask := queue.Push(successOnFirstTryFn, WithPriority(100))
 	secondTask := queue.Push(successOnSecondTryFn, WithPriority(1000))
@@ -113,11 +117,13 @@ func TestTaskQueue_Priority(t *testing.T) {
 // Fn that runs into timeout
 func TestTaskQueue_Timeout_Error(t *testing.T) {
 	opt := setup(t)
-	sendQueue := NewTaskQueue(context.Background(), opt)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	queue := NewTaskQueue(ctx, opt)
 
 	// Function which completes successfully after one second, if it is interrupted by context -> will return error
 	// Queued with a timeout of 100ms -> should error out
-	sendQueue.Push(func(ctx context.Context) error {
+	queue.Push(func(ctx context.Context) error {
 		_, ok := ctx.Deadline()
 		if !ok {
 			return errors.New("there is no deadline but there should be")
@@ -126,14 +132,14 @@ func TestTaskQueue_Timeout_Error(t *testing.T) {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case <-time.After(time.Second):
+		case <-time.After(20 * time.Millisecond):
 			return nil
 		}
 	}, WithTimeout(10*time.Millisecond), WithMaxRetries(1))
 
-	waitUntilFinished(sendQueue)
+	waitUntilFinished(queue)
 
-	status := sendQueue.DetailedStatus()
+	status := queue.DetailedStatus()
 	if status.TotalFailed != 1 {
 		fmt.Println(status.Pretty())
 		panic(status)
@@ -145,11 +151,13 @@ func TestTaskQueue_Timeout_Error(t *testing.T) {
 // Fn that does not run into timeout, but a timeout is configured
 func TestTaskQueue_Timeout_Success(t *testing.T) {
 	opt := setup(t)
-	sendQueue := NewTaskQueue(context.Background(), opt)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	queue := NewTaskQueue(ctx, opt)
 
 	// Function which completes successfully after 50ms, if it is interrupted by context -> will return error
 	// Queued with a timeout of 100ms -> should return successfully
-	sendQueue.Push(func(ctx context.Context) error {
+	queue.Push(func(ctx context.Context) error {
 		_, ok := ctx.Deadline()
 		if !ok {
 			return errors.New("there is no deadline but there should be")
@@ -158,14 +166,14 @@ func TestTaskQueue_Timeout_Success(t *testing.T) {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case <-time.After(50 * time.Millisecond):
+		case <-time.After(10 * time.Millisecond):
 			return nil
 		}
-	}, WithTimeout(100*time.Millisecond), WithMaxRetries(1))
+	}, WithTimeout(20*time.Millisecond), WithMaxRetries(1))
 
-	waitUntilFinished(sendQueue)
+	waitUntilFinished(queue)
 
-	status := sendQueue.DetailedStatus()
+	status := queue.DetailedStatus()
 	require.Equal(t, 1, status.TotalSuccessful, "total successful")
 	require.Equal(t, 0, status.TotalFailed, "total failed")
 }
@@ -173,9 +181,11 @@ func TestTaskQueue_Timeout_Success(t *testing.T) {
 // Fn that does not run into timeout (making sure no timeout is passed into it)
 func TestTaskQueue_Timeout_NoTimeout(t *testing.T) {
 	opt := setup(t)
-	sendQueue := NewTaskQueue(context.Background(), opt)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	queue := NewTaskQueue(ctx, opt)
 
-	sendQueue.Push(func(ctx context.Context) error {
+	queue.Push(func(ctx context.Context) error {
 		_, ok := ctx.Deadline()
 		if ok {
 			return errors.New("there is a deadline but there should not be")
@@ -183,13 +193,13 @@ func TestTaskQueue_Timeout_NoTimeout(t *testing.T) {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case <-time.After(500 * time.Millisecond):
+		case <-time.After(time.Millisecond):
 			return nil
 		}
 	}, WithMaxRetries(1))
-	waitUntilFinished(sendQueue)
+	waitUntilFinished(queue)
 
-	status := sendQueue.DetailedStatus()
+	status := queue.DetailedStatus()
 	require.Equal(t, 1, status.TotalSuccessful)
 	require.Equal(t, 0, status.TotalFailed)
 }

@@ -115,7 +115,7 @@ func (p *TaskQueue) Push(fn TaskQueueFunc, opts ...TaskQueueOption) uuid.UUID {
 		fn:       fn,
 		opts:     mergedOpts,
 	})
-	p.length = p.list.Length()
+	p.length = p.length + 1
 	p.queueLock.Unlock()
 
 	return GUID
@@ -138,7 +138,7 @@ func (p *TaskQueue) run() {
 		task := taskRaw.(task)
 
 		p.queueLock.Lock()
-		p.length = p.list.Length()
+		p.length = p.length - 1
 		p.inProgress = true
 		p.queueLock.Unlock()
 

@@ -4,6 +4,7 @@ go:
 
 script:
  - go test -race -v -run "^TestRequestResponse_SuccessMultipleInput$" -count 100 ./... # run this test many times. there was a race-condition deadlock in the request logic
+ - go test -race -v -run "^TestTaskQueue_" -count 1000 ./... # run taskQueue tests many times -> make sure that there are no race-conditions
  - go test -race -coverprofile=coverage.txt -covermode=atomic -v ./...
 
 after_success:
