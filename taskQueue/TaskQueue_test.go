@@ -13,6 +13,9 @@ import (
 )
 
 func setup(t *testing.T) TaskQueueOption {
+	taskQueueMockLock.Lock()
+	defer taskQueueMockLock.Unlock()
+
 	rand.Seed(time.Now().UnixNano())
 	successOnSecondTry = 1
 	successOnThirdTry = 1
@@ -20,24 +23,31 @@ func setup(t *testing.T) TaskQueueOption {
 	return WithContext(context.WithValue(context.Background(), "testing", t))
 }
 
+func waitUntilFinished(queue *TaskQueue) {
+	for {
+		length, inProgress := queue.Status()
+		if length > 0 || inProgress {
+			time.Sleep(10 * time.Millisecond)
+			continue
+		}
+		break
+	}
+}
+
 func TestTaskQueue_Default(t *testing.T) {
 	opt := setup(t)
-	sendQueue := NewTaskQueue(context.Background(), opt)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	sendQueue := NewTaskQueue(ctx, opt)
 	sendQueue.Push(successOnFirstTryFn)
 	sendQueue.Push(successOnSecondTryFn)
 	sendQueue.Push(successOnThirdTryFn)
 	sendQueue.Push(successOnTenthTryFn)
+	waitUntilFinished(sendQueue)
 
-	// Wait until finished
-	for sendQueue.Status().QueueLength > 0 || sendQueue.Status().InProgress {
-		time.Sleep(100 * time.Millisecond)
-	}
-	status := sendQueue.Status()
-	fmt.Println(status.Pretty())
-
-	require.Equal(t, 4, status.TotalSuccessful)
-	require.Equal(t, 0, status.TotalFailed)
-	require.Equal(t, 0, status.QueueLength)
+	status := sendQueue.DetailedStatus()
+	assert.Equal(t, 4, status.TotalSuccessful, "totalSuccessful")
+	assert.Equal(t, 0, status.TotalFailed, "totalFailed")
 }
 
 func TestTaskQueue_MaxRetry_ByTask(t *testing.T) {
@@ -47,17 +57,11 @@ func TestTaskQueue_MaxRetry_ByTask(t *testing.T) {
 	sendQueue.Push(successOnSecondTryFn, WithMaxRetries(2))
 	sendQueue.Push(successOnThirdTryFn, WithMaxRetries(2))
 	sendQueue.Push(successOnTenthTryFn, WithMaxRetries(2))
+	waitUntilFinished(sendQueue)
 
-	// Wait until finished
-	for sendQueue.Status().QueueLength > 0 || sendQueue.Status().InProgress {
-		time.Sleep(100 * time.Millisecond)
-	}
-	status := sendQueue.Status()
-	fmt.Println(status.Pretty())
-
+	status := sendQueue.DetailedStatus()
 	require.Equal(t, 2, status.TotalSuccessful)
 	require.Equal(t, 2, status.TotalFailed)
-	require.Equal(t, 0, status.QueueLength)
 }
 
 func TestTaskQueue_MaxRetry_ByDefault(t *testing.T) {
@@ -67,17 +71,11 @@ func TestTaskQueue_MaxRetry_ByDefault(t *testing.T) {
 	sendQueue.Push(successOnSecondTryFn)
 	sendQueue.Push(successOnThirdTryFn)
 	sendQueue.Push(successOnTenthTryFn)
+	waitUntilFinished(sendQueue)
 
-	// Wait until finished
-	for sendQueue.Status().QueueLength > 0 || sendQueue.Status().InProgress {
-		time.Sleep(100 * time.Millisecond)
-	}
-	status := sendQueue.Status()
-	fmt.Println(status.Pretty())
-
+	status := sendQueue.DetailedStatus()
 	require.Equal(t, 2, status.TotalSuccessful)
 	require.Equal(t, 2, status.TotalFailed)
-	require.Equal(t, 0, status.QueueLength)
 }
 
 func TestTaskQueue_Priority(t *testing.T) {
@@ -92,13 +90,9 @@ func TestTaskQueue_Priority(t *testing.T) {
 
 	// run manually
 	go queue.run()
+	waitUntilFinished(queue)
 
-	// Wait until finished
-	for queue.Status().QueueLength > 0 || queue.Status().InProgress {
-		time.Sleep(100 * time.Millisecond)
-	}
-
-	status := queue.Status()
+	status := queue.DetailedStatus()
 	for i, report := range status.Reports {
 		switch i {
 		case 0:
@@ -114,7 +108,6 @@ func TestTaskQueue_Priority(t *testing.T) {
 
 	require.Equal(t, 3, status.TotalSuccessful)
 	require.Equal(t, 0, status.TotalFailed)
-	require.Equal(t, 0, status.QueueLength)
 }
 
 // Fn that runs into timeout
@@ -136,17 +129,17 @@ func TestTaskQueue_Timeout_Error(t *testing.T) {
 		case <-time.After(time.Second):
 			return nil
 		}
-	}, WithTimeout(100*time.Millisecond), WithMaxRetries(1))
+	}, WithTimeout(10*time.Millisecond), WithMaxRetries(1))
 
-	// Wait until finished
-	for sendQueue.Status().QueueLength > 0 || sendQueue.Status().InProgress {
-		time.Sleep(100 * time.Millisecond)
+	waitUntilFinished(sendQueue)
+
+	status := sendQueue.DetailedStatus()
+	if status.TotalFailed != 1 {
+		fmt.Println(status.Pretty())
+		panic(status)
 	}
-
-	status := sendQueue.Status()
-	require.Equal(t, 0, status.TotalSuccessful)
-	require.Equal(t, 1, status.TotalFailed)
-	require.Equal(t, 0, status.QueueLength)
+	require.Equal(t, 0, status.TotalSuccessful, "total successful")
+	require.Equal(t, 1, status.TotalFailed, "total failed")
 }
 
 // Fn that does not run into timeout, but a timeout is configured
@@ -170,15 +163,11 @@ func TestTaskQueue_Timeout_Success(t *testing.T) {
 		}
 	}, WithTimeout(100*time.Millisecond), WithMaxRetries(1))
 
-	// Wait until finished
-	for sendQueue.Status().QueueLength > 0 || sendQueue.Status().InProgress {
-		time.Sleep(100 * time.Millisecond)
-	}
+	waitUntilFinished(sendQueue)
 
-	status := sendQueue.Status()
-	require.Equal(t, 1, status.TotalSuccessful)
-	require.Equal(t, 0, status.TotalFailed)
-	require.Equal(t, 0, status.QueueLength)
+	status := sendQueue.DetailedStatus()
+	require.Equal(t, 1, status.TotalSuccessful, "total successful")
+	require.Equal(t, 0, status.TotalFailed, "total failed")
 }
 
 // Fn that does not run into timeout (making sure no timeout is passed into it)
@@ -198,14 +187,9 @@ func TestTaskQueue_Timeout_NoTimeout(t *testing.T) {
 			return nil
 		}
 	}, WithMaxRetries(1))
+	waitUntilFinished(sendQueue)
 
-	// Wait until finished
-	for sendQueue.Status().QueueLength > 0 || sendQueue.Status().InProgress {
-		time.Sleep(100 * time.Millisecond)
-	}
-
-	status := sendQueue.Status()
+	status := sendQueue.DetailedStatus()
 	require.Equal(t, 1, status.TotalSuccessful)
 	require.Equal(t, 0, status.TotalFailed)
-	require.Equal(t, 0, status.QueueLength)
 }

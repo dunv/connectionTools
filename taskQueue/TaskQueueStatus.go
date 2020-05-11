@@ -7,11 +7,9 @@ import (
 )
 
 type TaskQueueStatus struct {
-	QueueLength            int         `json:"queueLength"`
 	TotalSuccessful        int         `json:"totalSuccessful"`
 	TotalSuccessfulByRetry map[int]int `json:"totalSuccessfulByRetry"`
 	TotalFailed            int         `json:"totalFailed"`
-	InProgress             bool        `json:"inProgress"`
 
 	Options                taskQueueOptions `json:"taskQueueOptions"`
 	First                  time.Time        `json:"first"`
@@ -27,16 +25,13 @@ type TaskQueueStatus struct {
 }
 
 func (s TaskQueueStatus) String() string {
-	return fmt.Sprintf("TaskQueue[length: %d, inProgress: %t, successful: %d, failed: %d]",
-		s.QueueLength, s.InProgress, s.TotalSuccessful, s.TotalFailed)
+	return fmt.Sprintf("TaskQueue[successful: %d, failed: %d]", s.TotalSuccessful, s.TotalFailed)
 }
 
 func (s TaskQueueStatus) Pretty() string {
-	return fmt.Sprintf(`SendQueueStatus [
-	queueLength:        %d
+	return fmt.Sprintf(`TaskQueueStatus [
 	totalSuccessful:    %d
 	totalFailed:        %d
-	inProgress:         %t
 
 	// LAST %s
 	firstMessage:       %s
@@ -48,10 +43,8 @@ func (s TaskQueueStatus) Pretty() string {
 	maxFailureDuration: %s
 	avgFailureDuration: %s
 ] `,
-		s.QueueLength,
 		s.TotalSuccessful,
 		s.TotalFailed,
-		s.InProgress,
 		s.Options.keepTaskReportsFor,
 		s.First.Format(time.RFC3339),
 		s.Last.Format(time.RFC3339),
@@ -112,8 +105,6 @@ func statusFromTaskQueue(p *TaskQueue) TaskQueueStatus {
 	}
 
 	status := TaskQueueStatus{
-		QueueLength:            p.Length(),
-		InProgress:             p.sendInProgress,
 		TotalSuccessful:        p.successful,
 		TotalSuccessfulByRetry: p.successfulByRetry,
 		TotalFailed:            p.failed,

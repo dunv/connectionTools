@@ -2,12 +2,10 @@ package taskQueue
 
 import (
 	"context"
-	"fmt"
 	"sync"
 	"time"
 
 	"github.com/dunv/concurrentList"
-	"github.com/dunv/ulog"
 	"github.com/google/uuid"
 )
 
@@ -23,19 +21,25 @@ type TaskReport struct {
 }
 
 type TaskQueue struct {
-	list *concurrentList.ConcurrentList
-	ctx  context.Context
-
+	list        *concurrentList.ConcurrentList
+	ctx         context.Context
 	defaultOpts taskQueueOptions
 
+	// sync for queue
+	// this is used to make sure that queueLength and inProgress can only
+	// be set and accessed when they are in sync
+	inProgress bool
+	length     int
+	queueLock  sync.Mutex
+
+	// sync for status
+	statusLock sync.Mutex
+
 	// statistics
-	sendInProgress    bool
 	successful        int
 	successfulByRetry map[int]int
 	failed            int
 	reports           *concurrentList.ConcurrentList
-
-	lock sync.Mutex
 }
 
 type task struct {
@@ -79,15 +83,21 @@ func NewTaskQueue(ctx context.Context, opts ...TaskQueueOption) *TaskQueue {
 	return queue
 }
 
-func (p *TaskQueue) Status() TaskQueueStatus {
-	p.lock.Lock()
-	defer p.lock.Unlock()
+func (p *TaskQueue) DetailedStatus() TaskQueueStatus {
+	p.statusLock.Lock()
+	status := statusFromTaskQueue(p)
+	p.statusLock.Unlock()
 
-	return statusFromTaskQueue(p)
+	return status
 }
 
-func (p *TaskQueue) Length() int {
-	return p.list.Length()
+func (p *TaskQueue) Status() (int, bool) {
+	p.queueLock.Lock()
+	length := p.length
+	inProgress := p.inProgress
+	p.queueLock.Unlock()
+
+	return length, inProgress
 }
 
 func (p *TaskQueue) Push(fn TaskQueueFunc, opts ...TaskQueueOption) uuid.UUID {
@@ -98,11 +108,16 @@ func (p *TaskQueue) Push(fn TaskQueueFunc, opts ...TaskQueueOption) uuid.UUID {
 	}
 
 	GUID := uuid.New()
-	p.list.Append(task{
+
+	p.queueLock.Lock()
+	p.list.Push(task{
 		taskGUID: GUID,
 		fn:       fn,
 		opts:     mergedOpts,
 	})
+	p.length = p.list.Length()
+	p.queueLock.Unlock()
+
 	return GUID
 }
 
@@ -111,22 +126,21 @@ func (p *TaskQueue) run() {
 		// check if context is done yet
 		select {
 		case <-p.ctx.Done():
-			fmt.Println("context is done")
 			return
 		default:
 		}
 
-		taskRaw, err := p.list.GetNextWithContext(p.ctx)
+		taskRaw, err := p.list.GetNext(p.ctx)
 		if err != nil {
-			ulog.Errorf("could not getNext (%s)", err)
+			// this happens when the context runs out -> end this routine (will run into ctx.Done above)
 			continue
 		}
-
 		task := taskRaw.(task)
 
-		p.lock.Lock()
-		p.sendInProgress = true
-		p.lock.Unlock()
+		p.queueLock.Lock()
+		p.length = p.list.Length()
+		p.inProgress = true
+		p.queueLock.Unlock()
 
 		retries := 0
 		backoff := task.opts.backoffInitial
@@ -175,8 +189,11 @@ func (p *TaskQueue) run() {
 		}
 		duration = time.Since(startTime)
 
-		p.lock.Lock()
-		p.sendInProgress = false
+		p.queueLock.Lock()
+		p.inProgress = false
+		p.queueLock.Unlock()
+
+		p.statusLock.Lock()
 		if success {
 			p.successful++
 			if val, ok := p.successfulByRetry[retries]; ok {
@@ -187,9 +204,9 @@ func (p *TaskQueue) run() {
 		} else {
 			p.failed++
 		}
-		p.lock.Unlock()
+		p.statusLock.Unlock()
 
-		p.reports.Append(TaskReport{
+		p.reports.Push(TaskReport{
 			TaskGUID: task.taskGUID,
 			Time:     time.Now(),
 			Item:     task,
