@@ -67,9 +67,12 @@ func TestRequestResponse_RequestTimeout(t *testing.T) {
 	defer cancel()
 	responseChannel := requestResponder.Request(domain, &BaseRequest{GUID: uuid.New().String()}, ctx)
 
-	_, err := ExtractErr(<-responseChannel)
+	var err error
+	for res := range responseChannel {
+		_, err = ExtractErr(res)
+	}
+
 	if !assert.EqualError(t, err, context.DeadlineExceeded.Error()) {
-		// TODO: this happens very rarely: investigate
 		status, err := requestResponder.Status(context.Background())
 		fmt.Println("status", status, err)
 		panic(err)
@@ -90,9 +93,11 @@ func TestRequestResponse_RequestCancelled(t *testing.T) {
 	responseChannel := requestResponder.Request(domain, &BaseRequest{GUID: uuid.New().String()}, ctx)
 	cancel()
 
-	_, err := ExtractErr(<-responseChannel)
+	var err error
+	for res := range responseChannel {
+		_, err = ExtractErr(res)
+	}
 	if !assert.EqualError(t, err, context.Canceled.Error()) {
-		// TODO: this happens very rarely: investigate
 		status, err := requestResponder.Status(context.Background())
 		fmt.Println("status", status, err)
 		panic(err)
@@ -196,7 +201,4 @@ func waitForSubscriptions(t *testing.T, requestResponder *RequestResponder) {
 
 		time.Sleep(100 * time.Millisecond)
 	}
-
-	// i had an error where a connection received the stop command twice -> try to wait long enough
-	time.Sleep(2 * time.Second)
 }

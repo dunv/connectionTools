@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync"
 
 	nh "github.com/dunv/connectionTools/notificationHub"
 	"github.com/dunv/uhelpers"
@@ -88,6 +89,7 @@ func (r *RequestResponder) Request(domain string, request Request, ctxs ...conte
 
 	// Default: wait forever
 	ctx := context.Background()
+	// If context was passed: use that one
 	if len(ctxs) == 1 {
 		ctx = ctxs[0]
 	}
@@ -95,39 +97,34 @@ func (r *RequestResponder) Request(domain string, request Request, ctxs ...conte
 	possibleResponseChannel := make(chan interface{})
 	subscriptionGUID := r.responseHub.Register(domain, possibleResponseChannel)
 	matchedResponseChannel := make(chan interface{})
+
+	var doOnce sync.Once
+	var replyAndUnregister = func(response interface{}, err error) {
+		matchedResponseChannel <- response
+		close(matchedResponseChannel)
+
+		if r.debug {
+			fmt.Printf("     -> Unregister (%s)\n", err)
+		}
+		// use new context for unregistering
+		unregisterErr := r.responseHub.Unregister(subscriptionGUID, err, context.Background())
+		if unregisterErr != nil {
+			ulog.Errorf("could not unregister (%s, should not happen -> unhandled)", err)
+		}
+		if r.debug {
+			fmt.Printf("     <- Unregister (%s)\n", err)
+		}
+	}
+
 	go func() {
 		for {
 			select {
 			case <-ctx.Done():
-				matchedResponseChannel <- ctx.Err()
-				if r.debug {
-					fmt.Printf("     -> Unregister (%s)\n", ctx.Err())
-				}
-				// use new context for unregistering
-				err := r.responseHub.Unregister(subscriptionGUID, ctx.Err(), context.Background())
-				if err != nil {
-					ulog.Errorf("could not unregister (%s, should not happen -> unhandled)", err)
-				}
-				if r.debug {
-					fmt.Printf("     <- Unregister (%s)\n", ctx.Err())
-				}
+				doOnce.Do(func() { replyAndUnregister(ctx.Err(), ctx.Err()) })
 				return
 			case possibleResponse := <-possibleResponseChannel:
 				if request.Match(possibleResponse) {
-					// important: return before unregistering
-					matchedResponseChannel <- possibleResponse
-
-					if r.debug {
-						fmt.Println("     -> Unregister (matched)")
-					}
-					// use new context for unregistering
-					err := r.responseHub.Unregister(subscriptionGUID, nil, context.Background())
-					if err != nil {
-						ulog.Errorf("could not unregister (%s, should not happen -> unhandled)", err)
-					}
-					if r.debug {
-						fmt.Println("     <- Unregister (matched)")
-					}
+					doOnce.Do(func() { replyAndUnregister(possibleResponse, nil) })
 					return
 				}
 			}
@@ -137,19 +134,7 @@ func (r *RequestResponder) Request(domain string, request Request, ctxs ...conte
 	go func() {
 		sends, _ := r.requestHub.Notify(domain, request, ctx)
 		if sends == 0 {
-			matchedResponseChannel <- nh.ErrNoOneListeningToRequest
-			if r.debug {
-				fmt.Println("     -> Unregister (no one listening)")
-			}
-			// use new context for unregistering
-			err := r.responseHub.Unregister(subscriptionGUID, nh.ErrNoOneListeningToRequest, context.Background())
-			if err != nil {
-				ulog.Errorf("could not unregister (%s, should not happen -> unhandled)", err)
-			}
-
-			if r.debug {
-				fmt.Println("     <- Unregister (no one listening)")
-			}
+			doOnce.Do(func() { replyAndUnregister(nh.ErrNoOneListeningToRequest, nh.ErrNoOneListeningToRequest) })
 		}
 	}()
 
