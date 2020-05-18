@@ -98,33 +98,38 @@ func (r *RequestResponder) Request(domain string, request Request, ctxs ...conte
 	subscriptionGUID := r.responseHub.Register(domain, possibleResponseChannel)
 	matchedResponseChannel := make(chan interface{})
 
+	// Exctract this so unregistering only takes place once
+	// Since we are running two goRoutines we cannot know whose <-ctx.Done() check will return first
+	// -> this needs to be synchronized for channel closing
 	var doOnce sync.Once
-	var replyAndUnregister = func(response interface{}, err error) {
-		matchedResponseChannel <- response
-		close(matchedResponseChannel)
+	var replyAndUnregisterOnce = func(response interface{}, err error) {
+		doOnce.Do(func() {
+			matchedResponseChannel <- response
+			close(matchedResponseChannel)
 
-		if r.debug {
-			fmt.Printf("     -> Unregister (%s)\n", err)
-		}
-		// use new context for unregistering
-		unregisterErr := r.responseHub.Unregister(subscriptionGUID, err, context.Background())
-		if unregisterErr != nil {
-			ulog.Errorf("could not unregister (%s, should not happen -> unhandled)", err)
-		}
-		if r.debug {
-			fmt.Printf("     <- Unregister (%s)\n", err)
-		}
+			if r.debug {
+				fmt.Printf("     -> Unregister (%s)\n", err)
+			}
+			// use new context for unregistering
+			unregisterErr := r.responseHub.Unregister(subscriptionGUID, err, context.Background())
+			if unregisterErr != nil {
+				ulog.Errorf("could not unregister (%s, should not happen -> unhandled)", err)
+			}
+			if r.debug {
+				fmt.Printf("     <- Unregister (%s)\n", err)
+			}
+		})
 	}
 
 	go func() {
 		for {
 			select {
 			case <-ctx.Done():
-				doOnce.Do(func() { replyAndUnregister(ctx.Err(), ctx.Err()) })
+				replyAndUnregisterOnce(ctx.Err(), ctx.Err())
 				return
 			case possibleResponse := <-possibleResponseChannel:
 				if request.Match(possibleResponse) {
-					doOnce.Do(func() { replyAndUnregister(possibleResponse, nil) })
+					replyAndUnregisterOnce(possibleResponse, nil)
 					return
 				}
 			}
@@ -134,7 +139,7 @@ func (r *RequestResponder) Request(domain string, request Request, ctxs ...conte
 	go func() {
 		sends, _ := r.requestHub.Notify(domain, request, ctx)
 		if sends == 0 {
-			doOnce.Do(func() { replyAndUnregister(nh.ErrNoOneListeningToRequest, nh.ErrNoOneListeningToRequest) })
+			replyAndUnregisterOnce(nh.ErrNoOneListeningToRequest, nh.ErrNoOneListeningToRequest)
 		}
 	}()
 
