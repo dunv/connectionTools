@@ -84,7 +84,7 @@ func (r *RequestResponder) AddResponseChannel(domain string, responseChannel cha
 
 func (r *RequestResponder) Request(domain string, request Request, ctxs ...context.Context) <-chan interface{} {
 	if len(ctxs) != 0 && len(ctxs) != 1 {
-		ulog.Panicf("incorrect usage (len(ctx) must be 1)")
+		ulog.Panic("incorrect usage (len(ctx) must be 1)")
 	}
 
 	// Default: wait forever
