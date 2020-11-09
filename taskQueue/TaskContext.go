@@ -5,13 +5,15 @@ import (
 	"time"
 )
 
+type TaskContextKey string
+
 const (
-	ctxKeyMaxRetries     string = "taskQueueOption.maxRetries"
-	ctxKeyBackoffInitial string = "taskQueueOption.backoffInitial"
-	ctxKeyBackoffFactor  string = "taskQueueOption.backoffFactor"
-	ctxKeyBackoffLimit   string = "taskQueueOption.backoffLimit"
-	ctxKeyCurrentRetry   string = "taskQueueOption.currentRetry"
-	ctxKeyCurrentBackoff string = "taskQueueOption.currentBackoff"
+	ctxKeyMaxRetries     TaskContextKey = "taskQueueOption.maxRetries"
+	ctxKeyBackoffInitial TaskContextKey = "taskQueueOption.backoffInitial"
+	ctxKeyBackoffFactor  TaskContextKey = "taskQueueOption.backoffFactor"
+	ctxKeyBackoffLimit   TaskContextKey = "taskQueueOption.backoffLimit"
+	ctxKeyCurrentRetry   TaskContextKey = "taskQueueOption.currentRetry"
+	ctxKeyCurrentBackoff TaskContextKey = "taskQueueOption.currentBackoff"
 )
 
 func MaxRetryFromCtx(ctx context.Context) int {

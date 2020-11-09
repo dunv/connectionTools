@@ -20,7 +20,7 @@ func setup(t *testing.T) TaskQueueOption {
 	successOnSecondTry = 1
 	successOnThirdTry = 1
 	successOnTenthTry = 1
-	return WithContext(context.WithValue(context.Background(), "testing", t))
+	return WithContext(context.WithValue(context.Background(), TaskContextKey("testing"), t))
 }
 
 func waitUntilFinished(queue *TaskQueue) {

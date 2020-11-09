@@ -20,7 +20,7 @@ func successOnFirstTryFn(ctx context.Context) error {
 	_ = BackoffLimitFromCtx(ctx)
 	_ = CurrentRetryFromCtx(ctx)
 	_ = CurrentBackoffFromCtx(ctx)
-	_ = ctx.Value("testing").(*testing.T)
+	_ = ctx.Value(TaskContextKey("testing")).(*testing.T)
 
 	return nil
 }
@@ -39,7 +39,7 @@ func successOnSecondTryFn(ctx context.Context) error {
 	_ = BackoffLimitFromCtx(ctx)
 	_ = CurrentRetryFromCtx(ctx)
 	_ = CurrentBackoffFromCtx(ctx)
-	_ = ctx.Value("testing").(*testing.T)
+	_ = ctx.Value(TaskContextKey("testing")).(*testing.T)
 
 	if successOnSecondTry < 2 {
 		successOnSecondTry++
@@ -62,7 +62,7 @@ func successOnThirdTryFn(ctx context.Context) error {
 	_ = BackoffLimitFromCtx(ctx)
 	_ = CurrentRetryFromCtx(ctx)
 	_ = CurrentBackoffFromCtx(ctx)
-	_ = ctx.Value("testing").(*testing.T)
+	_ = ctx.Value(TaskContextKey("testing")).(*testing.T)
 
 	if successOnThirdTry < 3 {
 		successOnThirdTry++
@@ -85,7 +85,7 @@ func successOnTenthTryFn(ctx context.Context) error {
 	_ = BackoffLimitFromCtx(ctx)
 	_ = CurrentRetryFromCtx(ctx)
 	_ = CurrentBackoffFromCtx(ctx)
-	_ = ctx.Value("testing").(*testing.T)
+	_ = ctx.Value(TaskContextKey("testing")).(*testing.T)
 
 	if successOnTenthTry < 10 {
 		successOnTenthTry++
