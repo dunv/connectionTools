@@ -32,6 +32,7 @@ type ConnectionChange struct {
 var ErrGroupTemplateAlreadyExists = errors.New("groupTemplate already exists")
 var ErrGroupAlreadyExists = errors.New("group already exists")
 var ErrUnknownGroup = errors.New("unknown group")
+var ErrUnknownConnectionName = errors.New("unknown connection")
 var ErrUnknownMetadata = errors.New("unknown metadata")
 
 func NewConnectionManager(groupRequiredConnections []string, groupRequiredMetadata []string, changeChannel ...*chan ConnectionChange) *ConnectionManager {
@@ -49,28 +50,40 @@ func NewConnectionManager(groupRequiredConnections []string, groupRequiredMetada
 	}
 }
 
-func (c *ConnectionManager) Connect(group string, name string) {
+func (c *ConnectionManager) Connect(group string, name string) error {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 	c.addGroupIfNotExists(group)
+	if _, ok := c.groups[group].Connections[name]; !ok {
+		return ErrUnknownConnectionName
+	}
 	c.groups[group].Connections[name] = true
 	c.processChange(group)
+	return nil
 }
 
-func (c *ConnectionManager) Disconnect(group string, name string) {
+func (c *ConnectionManager) Disconnect(group string, name string) error {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 	c.addGroupIfNotExists(group)
+	if _, ok := c.groups[group].Connections[name]; !ok {
+		return ErrUnknownConnectionName
+	}
 	c.groups[group].Connections[name] = false
 	c.processChange(group)
+	return nil
 }
 
-func (c *ConnectionManager) SetMetadata(group string, name string, data interface{}) {
+func (c *ConnectionManager) SetMetadata(group string, name string, data interface{}) error {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 	c.addGroupIfNotExists(group)
+	if _, ok := c.groups[group].Metadata[name]; !ok {
+		return ErrUnknownMetadata
+	}
 	c.groups[group].Metadata[name] = data
 	c.processChange(group)
+	return nil
 }
 
 func (c *ConnectionManager) GetMetadata(group string, name string) (interface{}, error) {
@@ -153,14 +166,18 @@ func (s *ConnectionManager) processChange(group string) {
 		if !s.groups[group].Connected && s.changeChannel != nil {
 			*s.changeChannel <- ConnectionChange{Group: group, Connected: true}
 		}
-
 		s.groups[group].Connected = true
 	} else if !oneConnected {
 		// if not a single client is connected, consider this group disconnected, notify subscriber if it was connected previously
 		if s.groups[group].Connected && s.changeChannel != nil {
 			*s.changeChannel <- ConnectionChange{Group: group, Connected: false}
 		}
-
 		delete(s.groups, group)
+	} else if oneConnected && (!allConnected || !allMetadataPresent) {
+		// if it used to be connected but is not connected anymore
+		if s.groups[group].Connected && s.changeChannel != nil {
+			*s.changeChannel <- ConnectionChange{Group: group, Connected: false}
+		}
+		s.groups[group].Connected = false
 	}
 }
