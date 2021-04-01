@@ -1,4 +1,4 @@
-[![Build Status](https://travis-ci.org/dunv/connectionTools.svg?branch=master)](https://travis-ci.org/dunv/connectionTools)
+[![Build Status](https://travis-ci.com/dunv/connectionTools.svg?branch=master)](https://travis-ci.org/dunv/connectionTools)
 [![GoDoc](https://godoc.org/github.com/dunv/connectionTools?status.svg)](https://godoc.org/github.com/dunv/connectionTools)
 [![codecov](https://codecov.io/gh/dunv/connectionTools/branch/master/graph/badge.svg)](https://codecov.io/gh/dunv/connectionTools)
 
@@ -56,7 +56,7 @@ res := <-requestResponder.Request("testDomain", &ct.BaseRequest{GUID: "stringGUI
 response, err := ct.ExtractErr(res)
 ```
 
-# TaskQueue
+## TaskQueue
 
 a container which accepts tasks (in form of functions) and runs them in-order or priority-sorted according to given rules. Rules include exponential backoff, retries, priorities and timeouts. Tasks can be pushed non-blockingly into the container. A context is passed to every task, this provides a way of interrupting a task while it is running.
 
