@@ -68,9 +68,9 @@ containerContext := context.Background()
 
 // create container
 taskQueue := tq.NewTaskQueue(ctx, tq.WithBackOff(
-    cfg.AzureDeploymentServiceGrpcBackoffInitial,
-    cfg.AzureDeploymentServiceGrpcBackoffFactor,
-    cfg.AzureDeploymentServiceGrpcBackoffLimit,
+    10 * time.Millisecond,
+    2,
+    20 * time.Second,
 ))
 
 // push task (non-blocking)
