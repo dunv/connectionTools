@@ -7,23 +7,27 @@ import (
 	"sync"
 
 	nh "github.com/dunv/connectionTools/notificationHub"
-	"github.com/dunv/uhelpers"
 	"github.com/dunv/ulog"
 )
 
 type RequestResponder struct {
-	debug       bool
+	options     requestResponderOptions
 	responseHub *nh.NotificationHub
 	requestHub  *nh.NotificationHub
 }
 
-func NewRequestResponder() *RequestResponder {
-	var debug bool
-	// debug = true
+func NewRequestResponder(opts ...RequestResponderOption) *RequestResponder {
+	mergedOpts := requestResponderOptions{
+		debug: false,
+	}
+	for _, opt := range opts {
+		opt.apply(&mergedOpts)
+	}
+
 	return &RequestResponder{
-		debug:       debug,
-		responseHub: nh.NewNotificationHub(nh.NotificationHubOptions{Debug: uhelpers.PtrToBool(debug)}),
-		requestHub:  nh.NewNotificationHub(nh.NotificationHubOptions{Debug: uhelpers.PtrToBool(debug)}),
+		options:     mergedOpts,
+		responseHub: nh.NewNotificationHub(nh.WithDebug(mergedOpts.debug)),
+		requestHub:  nh.NewNotificationHub(nh.WithDebug(mergedOpts.debug)),
 	}
 }
 
@@ -49,7 +53,7 @@ func (r *RequestResponder) AddRequestChannel(domain string, requestChannel chan<
 	guid := r.requestHub.Register(domain, requestChannel)
 	go func() {
 		<-ctx.Done()
-		if r.debug {
+		if r.options.debug {
 			fmt.Println("     -> Unregister (cancelled)")
 		}
 		// use new context for unregistering
@@ -57,7 +61,7 @@ func (r *RequestResponder) AddRequestChannel(domain string, requestChannel chan<
 		if err != nil {
 			ulog.Errorf("could not unregister (%s, should not happen -> unhandled)", err)
 		}
-		if r.debug {
+		if r.options.debug {
 			fmt.Println("     <- Unregister (cancelled)")
 		}
 	}()
@@ -107,7 +111,7 @@ func (r *RequestResponder) Request(domain string, request Request, ctxs ...conte
 			matchedResponseChannel <- response
 			close(matchedResponseChannel)
 
-			if r.debug {
+			if r.options.debug {
 				fmt.Printf("     -> Unregister (%s)\n", err)
 			}
 			// use new context for unregistering
@@ -115,7 +119,7 @@ func (r *RequestResponder) Request(domain string, request Request, ctxs ...conte
 			if unregisterErr != nil {
 				ulog.Errorf("could not unregister (%s, should not happen -> unhandled)", err)
 			}
-			if r.debug {
+			if r.options.debug {
 				fmt.Printf("     <- Unregister (%s)\n", err)
 			}
 		})

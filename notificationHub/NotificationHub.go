@@ -13,7 +13,7 @@ type NotificationHub struct {
 	connections map[string]*HubConnection
 	connMap     map[string][]string
 	connLock    *semaphore.Weighted
-	options     NotificationHubOptions
+	options     notificationHubOptions
 }
 
 type NotificationHubStatus struct {
@@ -36,28 +36,21 @@ func (h NotificationHubStatus) String() string {
 	return fmt.Sprintf("Hub[connections: %s, registry: %s]", conns, registry)
 }
 
-func NewNotificationHub(opts ...NotificationHubOptions) *NotificationHub {
-	optsWithDefaults := NotificationHubOptions{}
-	if len(opts) > 0 && opts[0].SendTimeout != nil {
-		optsWithDefaults.SendTimeout = opts[0].SendTimeout
+func NewNotificationHub(opts ...NotificationHubOption) *NotificationHub {
+	// Default options
+	mergedOpts := notificationHubOptions{
+		sendTimeout: 0,
+		sendBuffer:  0,
+		debug:       false,
 	}
-
-	if len(opts) > 0 && opts[0].SendBuffer != nil {
-		optsWithDefaults.SendBuffer = opts[0].SendBuffer
-	} else {
-		optsWithDefaults.SendBuffer = uhelpers.PtrToInt(0)
-	}
-
-	if len(opts) > 0 && opts[0].Debug != nil {
-		optsWithDefaults.Debug = opts[0].Debug
-	} else {
-		optsWithDefaults.Debug = uhelpers.PtrToBool(false)
+	for _, opt := range opts {
+		opt.apply(&mergedOpts)
 	}
 
 	return &NotificationHub{
 		connections: map[string]*HubConnection{},
 		connMap:     map[string][]string{},
-		options:     optsWithDefaults,
+		options:     mergedOpts,
 		connLock:    semaphore.NewWeighted(1),
 	}
 }
@@ -94,19 +87,19 @@ func (s *NotificationHub) Status(ctx context.Context) (*NotificationHubStatus, e
 }
 
 func (s *NotificationHub) Register(broadcastDomain string, channel chan<- interface{}) string {
-	if *s.options.Debug {
+	if s.options.debug {
 		fmt.Println("-> register")
 	}
 	err := s.connLock.Acquire(context.Background(), 1)
 	if err != nil {
 		panic(err)
 	}
-	if *s.options.Debug {
+	if s.options.debug {
 		fmt.Println("   register")
 	}
 
 	guid := uuid.New().String()
-	s.connections[guid] = NewHubConnection(guid, broadcastDomain, channel, *s.options.SendBuffer, *s.options.Debug)
+	s.connections[guid] = NewHubConnection(guid, broadcastDomain, channel, s.options.sendBuffer, s.options.debug)
 
 	// update registry
 	if _, ok := s.connMap[broadcastDomain]; !ok {
@@ -116,7 +109,7 @@ func (s *NotificationHub) Register(broadcastDomain string, channel chan<- interf
 	}
 
 	s.connLock.Release(1)
-	if *s.options.Debug {
+	if s.options.debug {
 		fmt.Println("   register ->")
 	}
 	return guid
@@ -124,7 +117,7 @@ func (s *NotificationHub) Register(broadcastDomain string, channel chan<- interf
 
 // Unregister from Hub
 func (s *NotificationHub) Unregister(connectionGUID string, reason error, ctx context.Context) error {
-	if *s.options.Debug {
+	if s.options.debug {
 		fmt.Println("-> unregister   ")
 	}
 
@@ -133,13 +126,13 @@ func (s *NotificationHub) Unregister(connectionGUID string, reason error, ctx co
 		return err
 	}
 
-	if *s.options.Debug {
+	if s.options.debug {
 		fmt.Println("   unregister   ")
 	}
 	s.unregister(connectionGUID, reason)
 
 	s.connLock.Release(1)
-	if *s.options.Debug {
+	if s.options.debug {
 		fmt.Println("   unregister ->")
 	}
 
@@ -147,7 +140,7 @@ func (s *NotificationHub) Unregister(connectionGUID string, reason error, ctx co
 }
 
 func (s *NotificationHub) unregister(connectionGUID string, reason error) {
-	if *s.options.Debug {
+	if s.options.debug {
 		if reason != nil {
 			fmt.Printf("unregistering %s (%s) \n", connectionGUID, reason)
 		} else {
@@ -181,14 +174,14 @@ func (s *NotificationHub) Notify(broadcastDomain string, data interface{}, ctxs 
 	if len(ctxs) == 1 {
 		// If given explicitly: highest precedence
 		ctx = ctxs[0]
-	} else if s.options.SendTimeout != nil {
+	} else if s.options.sendTimeout != 0 {
 		// If not given but configured -> assign
 		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(ctx, *s.options.SendTimeout)
+		ctx, cancel = context.WithTimeout(ctx, s.options.sendTimeout)
 		defer cancel()
 	}
 
-	if *s.options.Debug {
+	if s.options.debug {
 		fmt.Println("-> notify     ", data)
 	}
 	err := s.connLock.Acquire(ctx, 1)
@@ -196,7 +189,7 @@ func (s *NotificationHub) Notify(broadcastDomain string, data interface{}, ctxs 
 		return 0, err
 	}
 
-	if *s.options.Debug {
+	if s.options.debug {
 		fmt.Println("   notify     ", data)
 	}
 	errs := map[string]error{}
@@ -217,7 +210,7 @@ func (s *NotificationHub) Notify(broadcastDomain string, data interface{}, ctxs 
 	}
 
 	s.connLock.Release(1)
-	if *s.options.Debug {
+	if s.options.debug {
 		fmt.Println("   notify ->  ", data)
 	}
 

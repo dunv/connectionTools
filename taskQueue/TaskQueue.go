@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/dunv/concurrentList"
+	"github.com/dunv/ulog"
 	"github.com/google/uuid"
 )
 
@@ -48,16 +49,26 @@ type task struct {
 	fn       TaskQueueFunc
 }
 
+// Creates a new TaskQueue
+// default options:
+// - no retry
+// - no backoff
+// - keep status reports for 1 day
 func NewTaskQueue(ctx context.Context, opts ...TaskQueueOption) *TaskQueue {
 	// Default options
 	mergedOpts := taskQueueOptions{
-		keepTaskReportsFor: 24 * time.Hour,
-		maxRetries:         -1,
-		backoffInitial:     0,
-		backoffFactor:      1,
-		backoffLimit:       1,
-		priority:           1000,
-		ctx:                context.Background(),
+		maxRetries:             -1,
+		backoffInitial:         0,
+		backoffFactor:          1,
+		backoffLimit:           1,
+		keepTaskReportsFor:     24 * time.Hour,
+		successChannel:         nil,
+		failureChannel:         nil,
+		priority:               1000,
+		ctx:                    context.Background(),
+		startManually:          false,
+		timeout:                nil,
+		timeoutCheckerInterval: nil,
 	}
 	for _, opt := range opts {
 		opt.apply(&mergedOpts)
@@ -157,8 +168,26 @@ func (p *TaskQueue) run() {
 				ctx, cancel = context.WithTimeout(ctx, *task.opts.timeout)
 			}
 
-			// Execute fn
-			err = task.fn(ctx)
+			// Execute fn asynchronously
+			done := make(chan struct{})
+			go func() {
+				err = task.fn(ctx)
+				done <- struct{}{}
+			}()
+
+			if task.opts.timeoutCheckerInterval != nil {
+			TimeoutChecker:
+				for {
+					select {
+					case <-done:
+						break TimeoutChecker
+					case <-time.After(*task.opts.timeoutCheckerInterval):
+						ulog.Errorf("a function is not respecting its context (execution takes longer than expected)")
+					}
+				}
+			} else {
+				<-done
+			}
 
 			// Cleanup context
 			if cancel != nil {

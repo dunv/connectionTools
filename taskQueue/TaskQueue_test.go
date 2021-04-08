@@ -121,8 +121,8 @@ func TestTaskQueue_Timeout_Error(t *testing.T) {
 	defer cancel()
 	queue := NewTaskQueue(ctx, opt)
 
-	// Function which completes successfully after one second, if it is interrupted by context -> will return error
-	// Queued with a timeout of 100ms -> should error out
+	// Function which completes successfully after 20ms, if it is interrupted by context -> will return error
+	// Queued with a timeout of 10ms -> should error out
 	queue.Push(func(ctx context.Context) error {
 		_, ok := ctx.Deadline()
 		if !ok {
@@ -132,7 +132,7 @@ func TestTaskQueue_Timeout_Error(t *testing.T) {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case <-time.After(20 * time.Millisecond):
+		case <-time.After(40 * time.Millisecond):
 			return nil
 		}
 	}, WithTimeout(10*time.Millisecond), WithMaxRetries(1))
@@ -142,7 +142,7 @@ func TestTaskQueue_Timeout_Error(t *testing.T) {
 	status := queue.DetailedStatus()
 	if status.TotalFailed != 1 {
 		fmt.Println(status.Pretty())
-		panic(status)
+		t.Error(status)
 	}
 	require.Equal(t, 0, status.TotalSuccessful, "total successful")
 	require.Equal(t, 1, status.TotalFailed, "total failed")

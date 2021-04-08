@@ -6,7 +6,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/dunv/uhelpers"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -188,7 +187,7 @@ func TestNotificationHubConnection_NoTimeoutConfigured(t *testing.T) {
 }
 
 func TestNotificationHubConnection_WithTimeout1(t *testing.T) {
-	hub := NewNotificationHub(NotificationHubOptions{SendTimeout: uhelpers.PtrToDuration(10 * time.Millisecond)})
+	hub := NewNotificationHub(WithSendTimeout(10 * time.Millisecond))
 	guid := hub.Register("test", make(chan interface{}))
 
 	done := make(chan bool)
@@ -222,7 +221,7 @@ func TestNotificationHubConnection_WithTimeout1(t *testing.T) {
 }
 
 func TestNotificationHubConnection_WithTimeout2(t *testing.T) {
-	hub := NewNotificationHub(NotificationHubOptions{SendTimeout: uhelpers.PtrToDuration(100 * time.Millisecond)})
+	hub := NewNotificationHub(WithSendTimeout(100 * time.Millisecond))
 	expectedMessages := []string{"test1", "test2", "test3", "test4"}
 	domain := "testDomain"
 	done := make(chan bool)
@@ -253,7 +252,7 @@ func TestNotificationHubConnection_WithTimeout2(t *testing.T) {
 }
 
 func TestNotificationHubConnection_WithBuffering1(t *testing.T) {
-	hub := NewNotificationHub(NotificationHubOptions{SendBuffer: uhelpers.PtrToInt(100)})
+	hub := NewNotificationHub(WithSendBuffer(100))
 	expectedMessages1 := []string{"test11", "test12", "test13", "test14"}
 	expectedMessages2 := []string{"test21", "test22", "test23", "test24"}
 	domain1 := "testDomain1"
@@ -299,7 +298,7 @@ func TestNotificationHubConnection_WithBuffering1(t *testing.T) {
 }
 
 func TestNotificationHubConnection_WithBuffering2(t *testing.T) {
-	hub := NewNotificationHub(NotificationHubOptions{SendBuffer: uhelpers.PtrToInt(1)})
+	hub := NewNotificationHub(WithSendBuffer(1))
 
 	hub.Register("test", make(chan interface{}))
 	done := make(chan bool)
@@ -323,7 +322,7 @@ func TestNotificationHubConnection_WithBuffering2(t *testing.T) {
 }
 
 func TestNotificationHubConnection_WithBuffering3(t *testing.T) {
-	hub := NewNotificationHub(NotificationHubOptions{SendBuffer: uhelpers.PtrToInt(1)})
+	hub := NewNotificationHub(WithSendBuffer(1))
 
 	hub.Register("test", make(chan interface{}))
 	done := make(chan bool)
@@ -349,7 +348,7 @@ func TestNotificationHubConnection_WithBuffering3(t *testing.T) {
 }
 
 func TestNotificationHubConnection_WithBuffering4(t *testing.T) {
-	hub := NewNotificationHub(NotificationHubOptions{SendBuffer: uhelpers.PtrToInt(2)})
+	hub := NewNotificationHub(WithSendBuffer(2))
 
 	hub.Register("test", make(chan interface{}))
 	done := make(chan bool)
@@ -376,7 +375,7 @@ func TestNotificationHubConnection_WithBuffering4(t *testing.T) {
 }
 
 func TestNotificationHubConnection_WithBuffering5(t *testing.T) {
-	hub := NewNotificationHub(NotificationHubOptions{SendBuffer: uhelpers.PtrToInt(4)})
+	hub := NewNotificationHub(WithSendBuffer(4))
 
 	hub.Register("test", make(chan interface{}))
 	done := make(chan bool)

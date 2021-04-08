@@ -60,6 +60,8 @@ response, err := ct.ExtractErr(res)
 
 a container which accepts tasks (in form of functions) and runs them in-order or priority-sorted according to given rules. Rules include exponential backoff, retries, priorities and timeouts. Tasks can be pushed non-blockingly into the container. A context is passed to every task, this provides a way of interrupting a task while it is running.
 
+**Important:** if a task does not complete, NO new task is scheduled. This is a design-decision, as this way no orphaned tasks can linger. In order to troubleshoot this, a checker-routine can be enabled which continuously logs if a task exceeds its alotted context
+
 ```go
 import tq "github.com/dunv/connectionTools/taskQueue"
 
@@ -67,11 +69,7 @@ import tq "github.com/dunv/connectionTools/taskQueue"
 containerContext := context.Background()
 
 // create container
-taskQueue := tq.NewTaskQueue(ctx, tq.WithBackOff(
-    10 * time.Millisecond,
-    2,
-    20 * time.Second,
-))
+taskQueue := tq.NewTaskQueue(ctx, tq.WithBackOff( 10 * time.Millisecond, 2, 20 * time.Second))
 
 // push task (non-blocking)
 taskQueue.Push(func(ctx context.Context) error {
