@@ -86,6 +86,20 @@ func (s *NotificationHub) Status(ctx context.Context) (*NotificationHubStatus, e
 	}
 }
 
+func (s *NotificationHub) Registry(ctx context.Context) (map[string][]string, error) {
+	if s.connLock.Acquire(ctx, 1) == nil {
+		registry := map[string][]string{}
+		for k, v := range s.connMap {
+			i := append([]string{}, v...)
+			registry[k] = i
+		}
+		s.connLock.Release(1)
+		return registry, nil
+	} else {
+		return nil, ErrHubLocked
+	}
+}
+
 func (s *NotificationHub) Register(broadcastDomain string, channel chan<- interface{}) string {
 	if s.options.debug {
 		fmt.Println("-> register")
