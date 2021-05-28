@@ -88,9 +88,9 @@ func TestTaskQueue_Priority(t *testing.T) {
 	defer cancel()
 	queue := NewTaskQueue(ctx, opt, withStartManually())
 
-	firstTask := queue.Push(successOnFirstTryFn, WithPriority(100))
-	secondTask := queue.Push(successOnSecondTryFn, WithPriority(1000))
-	thirdTask := queue.Push(successOnThirdTryFn, WithPriority(2000))
+	firstTask := queue.Push(successOnFirstTryFn, WithDefaultPriority(100))
+	secondTask := queue.Push(successOnSecondTryFn, WithDefaultPriority(1000))
+	thirdTask := queue.Push(successOnThirdTryFn, WithDefaultPriority(2000))
 
 	// run manually
 	go queue.run()

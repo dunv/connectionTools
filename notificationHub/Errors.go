@@ -3,7 +3,7 @@ package notificationHub
 import "errors"
 
 var ErrTooManyBufferRoutines = errors.New("cannot call start more than once (too many buffer routines)")
-var ErrTooManyControlRoutines = errors.New("cannot call start more than once (too many buffer routines)")
+var ErrTooManyControlRoutines = errors.New("cannot call start more than once (too many control routines)")
 
 var ErrSendTimeout = errors.New("send timeout")
 var ErrConnectionClosed = errors.New("tried to send on a closed connection")

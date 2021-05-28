@@ -37,6 +37,7 @@ func newFuncTaskQueueOption(f func(*taskQueueOptions)) *funcTaskQueueOption {
 }
 
 // A task will be retried this amount of times
+// Default is no retry
 func WithMaxRetries(maxRetries int) TaskQueueOption {
 	return newFuncTaskQueueOption(func(o *taskQueueOptions) {
 		o.maxRetries = maxRetries
@@ -44,6 +45,7 @@ func WithMaxRetries(maxRetries int) TaskQueueOption {
 }
 
 // Configure exponential backoff (if tasks are retried)
+// Default is no backoff
 func WithBackOff(backoffInitial time.Duration, backoffFactor int, backoffLimit time.Duration) TaskQueueOption {
 	return newFuncTaskQueueOption(func(o *taskQueueOptions) {
 		o.backoffInitial = backoffInitial
@@ -80,14 +82,18 @@ func WithContext(c context.Context) TaskQueueOption {
 	})
 }
 
-// Pass a priority
-func WithPriority(priority int) TaskQueueOption {
+// Pass a default priority for tasks
+// individual priorities (relative to this one)
+// can be passed when queuing a task
+// Default is 1000
+func WithDefaultPriority(priority int) TaskQueueOption {
 	return newFuncTaskQueueOption(func(o *taskQueueOptions) {
 		o.priority = priority
 	})
 }
 
 // Pass a timeout
+// Default is no timeout
 func WithTimeout(timeout time.Duration) TaskQueueOption {
 	return newFuncTaskQueueOption(func(o *taskQueueOptions) {
 		o.timeout = &timeout
@@ -95,6 +101,7 @@ func WithTimeout(timeout time.Duration) TaskQueueOption {
 }
 
 // Enable a "sanity-check" routine which runs next to a task and logs, if the task is running longer than its timeout
+// Default is no checker interval
 func WithTimeoutCheckerInterval(interval time.Duration) TaskQueueOption {
 	return newFuncTaskQueueOption(func(o *taskQueueOptions) {
 		o.timeoutCheckerInterval = &interval
