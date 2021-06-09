@@ -86,6 +86,44 @@ func TestNotificationHubConnection_TwoDomains(t *testing.T) {
 	assert.Len(t, status.Registry, 0)
 }
 
+func TestNotificationHubConnection_TwoDomainsBroadcast(t *testing.T) {
+	hub := NewNotificationHub()
+	expectedMessages := []string{"test11", "test12", "test13", "test14"}
+	domain1 := "testDomain1"
+	domain2 := "testDomain2"
+	done := make(chan bool)
+
+	receiveRoutines1 := 1000
+	receiveRoutines2 := 1000
+
+	for i := 0; i < receiveRoutines1; i++ {
+		startReceiving(t, hub, domain1, expectedMessages, done)
+	}
+
+	for i := 0; i < receiveRoutines2; i++ {
+		startReceiving(t, hub, domain2, expectedMessages, done)
+	}
+
+	for _, v := range expectedMessages {
+		sends, err := hub.Broadcast(v)
+		assert.Equal(t, receiveRoutines1+receiveRoutines2, sends)
+		assert.NoError(t, err, 0)
+	}
+
+	for i := 0; i < receiveRoutines1+receiveRoutines2; i++ {
+		select {
+		case <-time.After(100 * time.Millisecond):
+			t.Error("timeout")
+		case <-done:
+		}
+	}
+
+	status, err := hub.Status(context.Background())
+	assert.NoError(t, err)
+	assert.Len(t, status.Connections, 0, "expected no connections to be left")
+	assert.Len(t, status.Registry, 0)
+}
+
 func TestNotificationHubConnection_WithUnregister(t *testing.T) {
 	hub := NewNotificationHub()
 	expectedMessages := []string{"test1", "test2", "test3", "test4"}

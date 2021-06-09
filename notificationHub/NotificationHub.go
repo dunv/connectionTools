@@ -234,3 +234,60 @@ func (s *NotificationHub) Notify(broadcastDomain string, data interface{}, ctxs 
 
 	return successfulSends, nil
 }
+
+func (s *NotificationHub) Broadcast(data interface{}, ctxs ...context.Context) (int, error) {
+	if len(ctxs) > 1 {
+		panic("wrong usage")
+	}
+
+	// Default: wait forever
+	ctx := context.Background()
+	if len(ctxs) == 1 {
+		// If given explicitly: highest precedence
+		ctx = ctxs[0]
+	} else if s.options.sendTimeout != 0 {
+		// If not given but configured -> assign
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, s.options.sendTimeout)
+		defer cancel()
+	}
+
+	if s.options.debug {
+		fmt.Println("-> broadcast     ", data)
+	}
+	err := s.connLock.Acquire(ctx, 1)
+	if err != nil {
+		return 0, err
+	}
+
+	if s.options.debug {
+		fmt.Println("   broadcast     ", data)
+	}
+	errs := map[string]error{}
+	successfulSends := 0
+
+	for _, connGUIDs := range s.connMap {
+		for _, connGUID := range connGUIDs {
+			if conn, ok := s.connections[connGUID]; ok && conn.Connected() {
+				err := <-conn.Send(data, ctx)
+				if err != nil {
+					// s.unregister(connGUID, ErrSendTimeout)
+					errs[connGUID] = ErrSendTimeout
+				} else {
+					successfulSends++
+				}
+			}
+		}
+	}
+
+	s.connLock.Release(1)
+	if s.options.debug {
+		fmt.Println("   broadcast ->  ", data)
+	}
+
+	if len(errs) != 0 {
+		return successfulSends, ErrNotAllReachable{ErrMap: errs}
+	}
+
+	return successfulSends, nil
+}
