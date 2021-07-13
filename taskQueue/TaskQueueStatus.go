@@ -7,6 +7,9 @@ import (
 )
 
 type TaskQueueStatus struct {
+	CurrentQueueLength     int         `json:"currentQueueLength"`
+	CurrentQueueByPriority map[int]int `json:"currentQueueByPriority"`
+
 	TotalSuccessful        int         `json:"totalSuccessful"`
 	TotalSuccessfulByRetry map[int]int `json:"totalSuccessfulByRetry"`
 	TotalFailed            int         `json:"totalFailed"`
@@ -25,11 +28,15 @@ type TaskQueueStatus struct {
 }
 
 func (s TaskQueueStatus) String() string {
-	return fmt.Sprintf("TaskQueue[successful: %d, failed: %d]", s.TotalSuccessful, s.TotalFailed)
+	return fmt.Sprintf("TaskQueue[currentLength: %d, successful: %d, failed: %d]", s.CurrentQueueLength, s.TotalSuccessful, s.TotalFailed)
 }
 
 func (s TaskQueueStatus) Pretty() string {
 	return fmt.Sprintf(`TaskQueueStatus [
+	// IN-FLIGHT
+	currentQueueLength: %d
+
+	// PAST
 	totalSuccessful:    %d
 	totalFailed:        %d
 
@@ -43,6 +50,7 @@ func (s TaskQueueStatus) Pretty() string {
 	maxFailureDuration: %s
 	avgFailureDuration: %s
 ] `,
+		s.CurrentQueueLength,
 		s.TotalSuccessful,
 		s.TotalFailed,
 		s.Options.keepTaskReportsFor,
@@ -104,7 +112,21 @@ func statusFromTaskQueue(p *TaskQueue) TaskQueueStatus {
 		}
 	}
 
+	currentQueueLength := p.list.Length()
+	currentQueueRaw := p.list.GetWithFilter(func(item interface{}) bool { return true })
+	currentQueue := map[int]int{}
+	for _, item := range currentQueueRaw {
+		priority := item.(task).opts.priority
+		if amount, ok := currentQueue[priority]; ok {
+			currentQueue[priority] = amount + 1
+		} else {
+			currentQueue[priority] = 1
+		}
+	}
+
 	status := TaskQueueStatus{
+		CurrentQueueLength:     currentQueueLength,
+		CurrentQueueByPriority: currentQueue,
 		TotalSuccessful:        p.successful,
 		TotalSuccessfulByRetry: p.successfulByRetry,
 		TotalFailed:            p.failed,

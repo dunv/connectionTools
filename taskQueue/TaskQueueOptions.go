@@ -92,6 +92,14 @@ func WithDefaultPriority(priority int) TaskQueueOption {
 	})
 }
 
+// Pass a priority for a task
+// TODO: find concept for separating options for the whole queue and individual tasks
+func WithPriority(priority int) TaskQueueOption {
+	return newFuncTaskQueueOption(func(o *taskQueueOptions) {
+		o.priority = priority
+	})
+}
+
 // Pass a timeout
 // Default is no timeout
 func WithTimeout(timeout time.Duration) TaskQueueOption {
