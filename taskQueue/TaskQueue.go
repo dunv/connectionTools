@@ -169,24 +169,24 @@ func (p *TaskQueue) run() {
 			}
 
 			// Execute fn asynchronously
-			done := make(chan struct{})
+			taskStatusChannel := make(chan error)
 			go func() {
-				err = task.fn(ctx)
-				done <- struct{}{}
+				taskStatusChannel <- task.fn(ctx)
 			}()
 
+			var taskStatus error
 			if task.opts.timeoutCheckerInterval != nil {
 			TimeoutChecker:
 				for {
 					select {
-					case <-done:
+					case taskStatus = <-taskStatusChannel:
 						break TimeoutChecker
 					case <-time.After(*task.opts.timeoutCheckerInterval):
 						ulog.Errorf("a function is not respecting its context (execution takes longer than expected)")
 					}
 				}
 			} else {
-				<-done
+				taskStatus = <-taskStatusChannel
 			}
 
 			// Cleanup context
@@ -195,7 +195,14 @@ func (p *TaskQueue) run() {
 			}
 
 			// Calculate backoff and retries
-			if err != nil {
+			if taskStatus != nil {
+				// let subscribers know, that the task failed
+				if task.opts.failureChannel != nil {
+					go func() {
+						*p.defaultOpts.failureChannel <- taskStatus
+					}()
+				}
+
 				time.Sleep(backoff)
 
 				newBackoff := backoff * time.Duration(task.opts.backoffFactor)
