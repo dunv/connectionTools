@@ -1,2 +1,4 @@
 .DS_Store
 local
+memprofile.out
+cpuprofile.out

@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/dunv/ulog"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -39,6 +40,44 @@ func TestNotificationHubConnection_OneDomain(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Len(t, status.Connections, 0, "expected no connections to be left")
 	assert.Len(t, status.Registry, 0)
+}
+
+func BenchmarkNotificationHubRegisterUnregister(b *testing.B) {
+	hub := NewNotificationHub()
+	b.StartTimer()
+	for i := 0; i < b.N; i++ {
+		registrationGUID := hub.Register("testDomain", make(chan<- interface{}))
+		err := hub.Unregister(registrationGUID, nil, context.Background())
+		if err != nil {
+			b.Error(err)
+			b.FailNow()
+		}
+	}
+	b.StopTimer()
+}
+
+func BenchmarkNotificationHubNotify10(b *testing.B) {
+	runBenchmarkNotify(b, 10)
+}
+
+func BenchmarkNotificationHubNotify100(b *testing.B) {
+	runBenchmarkNotify(b, 100)
+}
+
+func BenchmarkNotificationHubNotify1000(b *testing.B) {
+	runBenchmarkNotify(b, 1000)
+}
+
+func BenchmarkNotificationHubBroadcast10(b *testing.B) {
+	runBenchmarkBroadcast(b, 10)
+}
+
+func BenchmarkNotificationHubBroadcast100(b *testing.B) {
+	runBenchmarkBroadcast(b, 100)
+}
+
+func BenchmarkNotificationHubBroadcast1000(b *testing.B) {
+	runBenchmarkBroadcast(b, 1000)
 }
 
 func TestNotificationHubConnection_TwoDomains(t *testing.T) {
@@ -597,4 +636,61 @@ func startReceiving(t *testing.T, hub *NotificationHub, domain string, expectedM
 			}
 		}
 	}()
+}
+
+// runs until context expires consuming and discarding a channel
+func runBenchmarkReceiver(ctx context.Context) chan interface{} {
+	channel := make(chan interface{})
+	go func() {
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-channel:
+			}
+		}
+	}()
+	return channel
+}
+
+func runBenchmarkNotify(b *testing.B, receivers int) {
+	hub := NewNotificationHub()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// create consumers
+	for i := 0; i < receivers; i++ {
+		registrationGUID := hub.Register("testDomain", runBenchmarkReceiver(ctx))
+		defer func() {
+			ulog.LogIfError(hub.Unregister(registrationGUID, nil, context.Background()))
+		}()
+	}
+
+	// run benchmark
+	b.StartTimer()
+	for i := 0; i < b.N; i++ {
+		_, _ = hub.Notify("testDomain", "boringData")
+	}
+	b.StopTimer()
+}
+
+func runBenchmarkBroadcast(b *testing.B, receivers int) {
+	hub := NewNotificationHub()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// create consumers
+	for i := 0; i < receivers; i++ {
+		registrationGUID := hub.Register("testDomain", runBenchmarkReceiver(ctx))
+		defer func() {
+			ulog.LogIfError(hub.Unregister(registrationGUID, nil, context.Background()))
+		}()
+	}
+
+	// run benchmark
+	b.StartTimer()
+	for i := 0; i < b.N; i++ {
+		_, _ = hub.Broadcast("boringData")
+	}
+	b.StopTimer()
 }
