@@ -8,6 +8,7 @@ import (
 
 	"github.com/dunv/ulog"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestNotificationHubConnection_OneDomain(t *testing.T) {
@@ -175,7 +176,7 @@ func TestNotificationHubConnection_WithUnregister(t *testing.T) {
 	go func() {
 		for i := 0; i < len(expectedMessages); i++ {
 			item := <-channel
-			assert.Equal(t, expectedMessages[i], item)
+			require.Equal(t, expectedMessages[i], item)
 			done <- true
 		}
 	}()
@@ -183,21 +184,21 @@ func TestNotificationHubConnection_WithUnregister(t *testing.T) {
 	go func() {
 		for _, v := range expectedMessages {
 			sends, err := hub.Notify(domain, v)
-			assert.Equal(t, 1, sends)
-			assert.NoError(t, err)
+			require.Equal(t, 1, sends)
+			require.NoError(t, err)
 		}
 	}()
 
 	for i := 0; i < len(expectedMessages); i++ {
 		select {
 		case <-time.After(100 * time.Millisecond):
-			t.Error("timeout")
+			require.FailNow(t, "timeout")
 		case <-done:
 		}
 	}
 
 	err := hub.Unregister(connGUID, nil, context.Background())
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	if err != nil {
 		return
 	}
@@ -205,7 +206,7 @@ func TestNotificationHubConnection_WithUnregister(t *testing.T) {
 	go func() {
 		for i := 0; i < len(expectedMessages); i++ {
 			item := <-channel
-			assert.Equal(t, expectedMessages[i], item)
+			require.Equal(t, expectedMessages[i], item)
 			done <- true
 		}
 	}()
@@ -214,30 +215,28 @@ func TestNotificationHubConnection_WithUnregister(t *testing.T) {
 	go func() {
 		for _, v := range expectedMessages {
 			sends, err := hub.Notify(domain, v)
-			assert.Equal(t, 0, sends)
-			assert.NoError(t, err)
+			require.Equal(t, 0, sends)
+			require.NoError(t, err)
 		}
 		sendSuccess <- true
 	}()
 
 	select {
 	case <-time.After(time.Millisecond):
-		t.Error("sendSuccess blocked, but should not have. sending to no registered connections should not block")
+		require.FailNow(t, "sendSuccess blocked, but should not have. sending to no registered connections should not block")
 	case <-sendSuccess:
 	}
 
-	for i := 0; i < len(expectedMessages); i++ {
-		select {
-		case <-time.After(100 * time.Millisecond):
-		case <-done:
-			t.Error("a message was consumed after unregistering")
-		}
+	select {
+	case <-time.After(10 * time.Millisecond):
+	case <-done:
+		require.FailNow(t, "a message was consumed after unregistering")
 	}
 
 	status, err := hub.Status(context.Background())
-	assert.NoError(t, err)
-	assert.Len(t, status.Connections, 0, "expected no connections to be left")
-	assert.Len(t, status.Registry, 0)
+	require.NoError(t, err)
+	require.Len(t, status.Connections, 0, "expected no connections to be left")
+	require.Len(t, status.Registry, 0)
 }
 
 func TestNotificationHubConnection_NoTimeoutConfigured(t *testing.T) {
