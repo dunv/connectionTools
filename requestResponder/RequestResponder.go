@@ -7,7 +7,6 @@ import (
 	"sync"
 
 	nh "github.com/dunv/connectionTools/notificationHub"
-	"github.com/dunv/ulog"
 )
 
 type RequestResponder struct {
@@ -59,7 +58,7 @@ func (r *RequestResponder) AddRequestChannel(domain string, requestChannel chan<
 		// use new context for unregistering
 		err := r.requestHub.Unregister(guid, errors.New("aborted"), context.Background())
 		if err != nil {
-			ulog.Errorf("could not unregister (%s, should not happen -> unhandled)", err)
+			fmt.Printf("could not unregister (%s, should not happen -> unhandled)\n", err)
 		}
 		if r.options.debug {
 			fmt.Println("     <- Unregister (cancelled)")
@@ -88,7 +87,7 @@ func (r *RequestResponder) AddResponseChannel(domain string, responseChannel cha
 
 func (r *RequestResponder) Request(domain string, request Request, ctxs ...context.Context) <-chan interface{} {
 	if len(ctxs) != 0 && len(ctxs) != 1 {
-		ulog.Panic("incorrect usage (len(ctx) must be 1)")
+		panic("incorrect usage (len(ctx) must be 1)")
 	}
 
 	// Default: wait forever
@@ -117,7 +116,7 @@ func (r *RequestResponder) Request(domain string, request Request, ctxs ...conte
 			// use new context for unregistering
 			unregisterErr := r.responseHub.Unregister(subscriptionGUID, err, context.Background())
 			if unregisterErr != nil {
-				ulog.Errorf("could not unregister (%s, should not happen -> unhandled)", err)
+				fmt.Printf("could not unregister (%s, should not happen -> unhandled)\n", err)
 			}
 			if r.options.debug {
 				fmt.Printf("     <- Unregister (%s)\n", err)

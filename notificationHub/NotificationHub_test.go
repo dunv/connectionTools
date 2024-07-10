@@ -3,10 +3,10 @@ package notificationHub
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
-	"github.com/dunv/ulog"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -661,7 +661,9 @@ func runBenchmarkNotify(b *testing.B, receivers int) {
 	for i := 0; i < receivers; i++ {
 		registrationGUID := hub.Register("testDomain", runBenchmarkReceiver(ctx))
 		defer func() {
-			ulog.LogIfError(hub.Unregister(registrationGUID, nil, context.Background()))
+			if err := hub.Unregister(registrationGUID, nil, context.Background()); err != nil {
+				fmt.Printf("Err unregistering: %v\n", err)
+			}
 		}()
 	}
 
@@ -682,7 +684,9 @@ func runBenchmarkBroadcast(b *testing.B, receivers int) {
 	for i := 0; i < receivers; i++ {
 		registrationGUID := hub.Register("testDomain", runBenchmarkReceiver(ctx))
 		defer func() {
-			ulog.LogIfError(hub.Unregister(registrationGUID, nil, context.Background()))
+			if err := hub.Unregister(registrationGUID, nil, context.Background()); err != nil {
+				fmt.Printf("Err unregistering: %v\n", err)
+			}
 		}()
 	}
 

@@ -2,11 +2,11 @@ package taskQueue
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"time"
 
 	"github.com/dunv/concurrentList"
-	"github.com/dunv/ulog"
 	"github.com/google/uuid"
 )
 
@@ -182,7 +182,7 @@ func (p *TaskQueue) run() {
 					case taskStatus = <-taskStatusChannel:
 						break TimeoutChecker
 					case <-time.After(*task.opts.timeoutCheckerInterval):
-						ulog.Errorf("a function is not respecting its context (execution takes longer than expected)")
+						fmt.Println("a function is not respecting its context (execution takes longer than expected)")
 					}
 				}
 			} else {
